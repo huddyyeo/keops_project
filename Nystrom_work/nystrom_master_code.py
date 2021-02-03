@@ -354,13 +354,13 @@ class Nystrom_NK:
         return S, U
         
 
-    def transform(self, x:np.ndarray) -> LazyTensor:
+    def transform(self, x:np.ndarray) -> np.array:
         ''' Applies transform on the data.
         
         Args:
-            X [LazyTensor] = data to transform
+            X [np.array] = data to transform
         Returns
-            X [LazyTensor] = data after transformation
+            X [np.array] = data after transformation
         '''
         
         K_nq = self._pairwise_kernels(x, self.components_, self.kernel)
@@ -368,15 +368,17 @@ class Nystrom_NK:
         return x_new
 
     
-    def K_approx(self, x:np.array) -> LazyTensor:
+    def K_approx(self, x:np.array) -> np.array:
         ''' Function to return Nystrom approximation to the kernel.
         
         Args:
-            X[LazyTensor] = data used in fit(.) function.
+            X[np.array] = data used in fit(.) function.
         Returns
-            K[LazyTensor] = Nystrom approximation to kernel'''
-        
+            K[np.array] = Nystrom approximation to kernel'''
+       
         K_nq = self._pairwise_kernels(x, self.components_, self.kernel)
-        K_nq = K_nq @ np.eye(K_nq.shape[1])
-        K_approx =  K_nq @ self.normalization_  @ K_nq.T
-        return K_approx
+        # For arrays: K_approx = K_nq @ self.normalization_ @ K_nq.T
+        # But to use @ with lazy tensors we have:
+        K_approx = K_nq @ (K_nq @ self.normalization_ ).T
+        
+        return K_approx.T 
