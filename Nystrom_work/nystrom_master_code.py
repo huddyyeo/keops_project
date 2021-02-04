@@ -3,12 +3,24 @@
 
 import numpy as np
 import torch
+import pykeops
+
+from pykeops.numpy import LazyTensor as LazyTensor_n
+from pykeops.numpy.cluster import grid_cluster
+from pykeops.numpy.cluster import from_matrix
+from pykeops.numpy.cluster import cluster_ranges_centroids
+from pykeops.numpy.cluster import sort_clusters
+from pykeops.torch import LazyTensor
+
 from sklearn.utils import check_random_state, as_float_array
 from scipy.linalg import svd
-from pykeops.torch import LazyTensor
-from pykeops.numpy import LazyTensor as LazyTensor_n
 from sklearn.kernel_approximation import Nystroem
 from scipy.sparse.linalg import aslinearoperator, eigsh
+
+import matplotlib.pyplot as plt
+import time
+
+
 
 
 ##############################################################################
@@ -255,7 +267,6 @@ class LazyNystrom_T:
 
 
 ################################################################################
-
 class Nystrom_NK:
     '''
         Class to implement Nystrom using numpy and PyKeops.
@@ -271,20 +282,22 @@ class Nystrom_NK:
 
         n_components [int] = how many samples to select from data.
         kernel [str] = type of kernel to use. Current options = {rbf}.
-        gamma [float] = exponential constant for the RBF kernel. 
+        sigma [float] = exponential constant for the RBF kernel. 
+        eps[float] = size for square bins
         random_state=[None, float] = to set a random seed for the random
                                      sampling of the samples. To be used when 
                                      reproducibility is needed.
 
     '''
   
-    def __init__(self, n_components=100, kernel='rbf', gamma:float = 1., 
-                 random_state=None): 
+    def __init__(self, n_components=100, kernel='rbf', sigma:float = 1., 
+                 eps:float = 0.05, random_state=None): 
 
         self.n_components = n_components
         self.kernel = kernel
         self.random_state = random_state
-        self.gamma = gamma
+        self.sigma = sigma
+        self.eps = eps
 
 
     def fit(self, x:np.ndarray):
@@ -318,7 +331,7 @@ class Nystrom_NK:
 
 
     def _pairwise_kernels(self, x:np.array, y:np.array = None, kernel='rbf',
-                          gamma = 1.) -> LazyTensor:
+                          sigma = 1.) -> LazyTensor:
         '''Helper function to build kernel
         
         Args:   X = torch tensor of dimension 2,
@@ -332,9 +345,12 @@ class Nystrom_NK:
         if kernel == 'linear': 
             K = x @ y.T 
         elif kernel == 'rbf':
-            x *= gamma
+            x /= sigma
+            y /= sigma
             x_i, x_j = LazyTensor_n(x[:, None, :]), LazyTensor_n(y[None, :, :])
             K_ij = ((-1*(x_i - x_j)**2).sum(2)).exp()
+            # block-sparse reduction preprocess
+            K_ij = self._Gauss_block_sparse_pre(x, y, K_ij, self.sigma, self.eps)
             
         return K_ij
 
@@ -382,3 +398,38 @@ class Nystrom_NK:
         K_approx = K_nq @ (K_nq @ self.normalization_ ).T
         
         return K_approx.T 
+
+
+    def _Gauss_block_sparse_pre(self, x:np.array, y:np.array, K_ij:LazyTensor, 
+                               sigma:float = 1., eps:float = 0.05):
+        ''' 
+        Helper function to preprocess data for block-sparse reduction
+        of the Gaussian kernel
+    
+        Args: 
+            x[np.array], y[np.array] = arrays giving rise to Gaussian kernel K(x,y)
+            K_ij[LazyTensor_n] = symbolic representation of K(x,y)
+            eps[float] = size for square bins
+
+        Returns:
+            K_ij[LazyTensor_n] = symbolic representation of K(x,y) with 
+                                set sparse ranges
+        '''
+
+        # class labels
+        x_labels = grid_cluster(x, eps) 
+        y_labels = grid_cluster(y, eps) 
+        # compute one range and centroid per class
+        x_ranges, x_centroids, _ = cluster_ranges_centroids(x, x_labels)
+        y_ranges, y_centroids, _ = cluster_ranges_centroids(y, y_labels)
+        # sort points
+        x, x_labels = sort_clusters(x, x_labels)
+        y, y_labels = sort_clusters(y, y_labels) 
+        # Compute a coarse Boolean mask:
+        D = np.sum((x_centroids[:, None, :] - y_centroids[None, :, :]) ** 2, 2)
+        keep = D < (4 * sigma) ** 2  # self.sigma 
+        # mask -> set of integer tensors
+        ranges_ij = from_matrix(x_ranges, y_ranges, keep)
+        K_ij.ranges = ranges_ij  # block-sparsity pattern
+
+        return K_ij
