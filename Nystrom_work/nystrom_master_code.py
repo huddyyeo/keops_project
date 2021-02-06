@@ -348,10 +348,14 @@ class Nystrom_NK:
             x /= sigma
             y /= sigma
             x_i, x_j = LazyTensor_n(x[:, None, :]), LazyTensor_n(y[None, :, :])
-            K_ij = ((-1*(x_i - x_j)**2).sum(2)).exp()
+            K_ij = (-1*((x_i - x_j)**2).sum(2)).exp()
             # block-sparse reduction preprocess
             K_ij = self._Gauss_block_sparse_pre(x, y, K_ij, self.sigma, self.eps)
-            
+        elif kernel == 'exp':
+            x_i, x_j = LazyTensor_n(x[:, None, :]), LazyTensor_n(y[None, :, :])
+            K_ij = (-1 * (abs(x_i - x_j)).sum(2)).exp()
+            # block-sparse reduction preprocess
+            K_ij = self._Gauss_block_sparse_pre(x, y, K_ij, self.sigma, self.eps)
         return K_ij
 
 
