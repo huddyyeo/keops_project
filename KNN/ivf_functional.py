@@ -68,7 +68,6 @@ def k_argmin_torch(x,y,k=5):
   sort,idx=torch.sort(d,dim=1)
   return idx[:,:k]
   
-  
 class IVF_flat():
   def __init__(self,k=5):
     self.c=None
@@ -78,7 +77,7 @@ class IVF_flat():
     self.x=None
     self.keep=None
     self.x_ranges=None
-  def fit(self,x,use_torch=True,clusters=50):
+  def fit(self,x,use_torch=True,clusters=50,a=5):
     
     cl, c = KMeans(x,clusters)
 
@@ -95,13 +94,13 @@ class IVF_flat():
     #get KNN graph for the clusters
     if use_torch:
 
-      self.ncl=k_argmin_torch(c,c)
+      self.ncl=k_argmin_torch(c,c,k=a)
     else:
         
       c1=LazyTensor(c.unsqueeze(1)) 
       c2=LazyTensor(c.unsqueeze(0))
       d=((c1-c2)** 2).sum(-1)
-      self.ncl=d.argKmin(K=self.k,dim=1) 
+      self.ncl=d.argKmin(K=a,dim=1) #get a nearest clusters
 
     #get the ranges and centroids 
     self.x_ranges, _, _ = cluster_ranges_centroids(x, self.cl)
@@ -109,16 +108,26 @@ class IVF_flat():
     #
     
     x, x_labels = sort_clusters(x,self.cl) #sort dataset to match ranges
-    
     self.x=LazyTensor(x.unsqueeze(1))#store dataset
       
-    r=torch.arange(clusters).repeat(self.k,1).T.reshape(-1).long()
+    r=torch.arange(clusters).repeat(a,1).T.reshape(-1).long()
     self.keep= torch.zeros([clusters,clusters], dtype=torch.bool)    
    
-    self.keep[r,self.ncl.flatten()]=True  
-    
+    self.keep[r,self.ncl.flatten()]=True        
+
     return self
-  
+  def sorted(self,x,labels=None):
+    if labels is None:
+      labels=self.cl
+    x,_=sort_clusters(x,labels)
+    return x
+  def clusters(self):
+    return self.c
+  def assign(self,x,c=None):
+    if c is None:
+      c=self.c
+    return k_argmin(x,c,self.k)
+    
   def kneighbors(self,y):
     if use_cuda:
         torch.cuda.synchronize()
