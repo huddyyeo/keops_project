@@ -365,7 +365,7 @@ class Nystrom_NK:
             K_ij = self._Gauss_block_sparse_pre(x, y, K_ij, self.sigma, self.eps)
         elif kernel == 'exp':
             x_i, x_j = LazyTensor_n(x[:, None, :]), LazyTensor_n(y[None, :, :])
-            K_ij = (-1 * (abs(x_i - x_j)).sum(2)).exp()
+            K_ij = (-1 * ((x_i - x_j)**2).sqrt().sum(2)).exp()
             # block-sparse reduction preprocess
             K_ij = self._Gauss_block_sparse_pre(x, y, K_ij, self.sigma, self.eps)
         return K_ij
@@ -470,3 +470,124 @@ class Nystrom_NK:
 
         self.dtype = x.dtype
         self.inv_eps = np.array([self.inv_eps]).astype(np.float32)[0]
+
+
+# Same as LazyNystrom_T but written with pyKeOps
+
+class LazyNystrom_TK:
+    '''
+        Class to implement Nystrom on torch LazyTensors.
+        This class works as an interface between lazy tensors and
+        the Nystrom algorithm in NumPy.
+
+        * The fit method computes K^{-1}_q.
+
+        * The transform method maps the data into the feature space underlying
+        the Nystrom-approximated kernel.
+
+        * The method K_approx directly computes the Nystrom approximation.
+
+        Parameters:
+
+        n_components [int] = how many samples to select from data.
+        kernel [str] = type of kernel to use. Current options = {linear, rbf}.
+        gamma [float] = exponential constant for the RBF kernel.
+        random_state=[None, float] = to set a random seed for the random
+                                     sampling of the samples. To be used when
+                                     reproducibility is needed.
+
+    '''
+
+    def __init__(self, n_components=100, kernel='rbf', sigma:float = 1.,
+                 eps:float = 0.05, random_state=None):
+
+        self.n_components = n_components
+        self.kernel = kernel
+        self.random_state = random_state
+        self.sigma = sigma
+        self.eps = eps
+
+    def fit(self, X: torch.tensor):
+        '''
+        Args:   X = torch tensor with features of shape
+                (1, n_samples, n_features)
+
+        Returns: Fitted instance of the class
+        '''
+        print(type(X))
+        print(X.shape)
+        # Basic checks: we have a lazy tensor and n_components isn't too large
+        assert type(X) == torch.Tensor, 'Input to fit(.) must be a Tensor.'
+        assert X.size(0) >= self.n_components, f'The application needs X.shape[1] >= n_components.'
+
+        # Number of samples
+        n_samples = X.size(0)
+        # Define basis
+        rnd = check_random_state(self.random_state)
+        inds = rnd.permutation(n_samples)
+        basis_inds = inds[:self.n_components]
+        basis = X[basis_inds]
+        # Build smaller kernel
+        basis_kernel = self._pairwise_kernels(basis, kernel=self.kernel)
+        if type(basis_kernel)==LazyTensor:
+            basis_kernel = basis_kernel.sum(dim=1)
+        # Get SVD
+        U, S, V = torch.svd(basis_kernel)
+        S = torch.maximum(S, torch.ones(S.size()) * 1e-12)
+        self.normalization_ = torch.mm(U / np.sqrt(S), V.t())
+        self.components_ = basis
+        self.component_indices_ = inds
+
+        return self
+
+    def _pairwise_kernels(self, x: torch.tensor, y: torch.tensor = None, kernel='rbf',
+                          sigma:float = 1.) -> LazyTensor:
+        '''Helper function to build kernel
+
+        Args:   X = torch tensor of dimension 2.
+                K_type = type of Kernel to return
+
+        Returns:
+                K_ij[LazyTensor]
+        '''
+
+        if y is None:
+            y = x
+        if kernel == 'linear':
+            K_ij = x @ y.T
+        elif kernel == 'rbf':
+            x /= sigma
+            y /= sigma
+            x_i, x_j = LazyTensor(x[:, None, :]), LazyTensor(y[None, :, :])
+            K_ij = (-1 * ((x_i - x_j) ** 2).sum(2)).exp()
+        elif kernel == 'exp':
+            x_i, x_j = LazyTensor(x[:, None, :]), LazyTensor(y[None, :, :])
+            K_ij = (-1 * ((x_i - x_j) ** 2).sqrt().sum(2)).exp()
+        return K_ij
+
+    def transform(self, X: torch.tensor) -> torch.tensor:
+        ''' Applies transform on the data.
+
+        Args:
+            X [LazyTensor] = data to transform
+        Returns
+            X [LazyTensor] = data after transformation
+        '''
+
+
+        K_nq = self._pairwise_kernels(X, self.components_, self.kernel)
+        return K_nq @ self.normalization_.t()
+
+    def K_approx(self, X: torch.tensor) -> torch.tensor:
+        ''' Function to return Nystrom approximation to the kernel.
+
+        Args:
+            X[torch.tensor] = data used in fit(.) function.
+        Returns
+            K[torch.tensor] = Nystrom approximation to kernel'''
+
+        K_nq = self._pairwise_kernels(X, self.components_, self.kernel)
+        K_approx = K_nq @ self.normalization_ @ K_nq.t()
+        return K_approx
+
+
