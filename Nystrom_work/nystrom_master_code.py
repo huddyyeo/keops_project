@@ -14,16 +14,15 @@ from pykeops.torch import LazyTensor
 
 from sklearn.utils import check_random_state, as_float_array
 from scipy.linalg import svd
-from sklearn.kernel_approximation import Nystroem
+
 from scipy.sparse.linalg import aslinearoperator, eigsh
+from scipy.sparse.linalg.interface import IdentityOperator
 
 import matplotlib.pyplot as plt
 import time
 
 
 
-
-##############################################################################
 
 '''
 The two classes below implement the Nystrom algorithm. One can transform
@@ -40,42 +39,40 @@ X_new_i = NN.transform(X)  # transform data to approximated features
 K_approx = NN.K_approx(X)  # obtain approximated kernel
 
 '''
+##############################################################################
 
 class Nystrom_N:
     '''
         This class implements Nystrom on numpy arrays.
     
         * The fit method computes K^{-1}_q.
-
         * The transform method maps the data into the feature space underlying
         the Nystrom-approximated kernel.
-
         * The method K_approx directly computes the Nystrom approximation.
 
         Parameters:
-
         n_components [int] = how many samples to select from data.
         kernel [str] = type of kernel to use. Current options = {linear, rbf}.
         gamma [float] = exponential constant for the RBF kernel. 
+        inv_eps [float] = additive invertibility constant for matrix decomposition.
         random_state=[None, float] = to set a random seed for the random
                                      sampling of the samples. To be used when 
                                      reproducibility is needed.
-
     '''
   
     def __init__(self, n_components=100, kernel='linear', gamma:float = 1., 
-                 random_state=None): 
+                 inv_eps:float = 1e-8, random_state=None): 
 
         self.n_components = n_components
         self.kernel = kernel
         self.random_state = random_state
         self.gamma = gamma
+        self.inv_eps = inv_eps
 
 
     def fit(self, X:np.array):
         ''' 
         Args:   X = data array with (n_samples, n_features)
-
         Returns: Fitted instance of the class
         '''
 
@@ -91,11 +88,13 @@ class Nystrom_N:
         basis_inds = inds[:self.n_components]
         basis = X[basis_inds]
         # Build smaller kernel
-        basis_kernel = self._pairwise_kernels(basis, kernel = self.kernel)  
+        basis_kernel = self._pairwise_kernels(basis, kernel = self.kernel) 
         # Get SVD
+        basis_kernel = basis_kernel + np.eye(basis_kernel.shape[0]) * self.inv_eps
         U, S, V = svd(basis_kernel)
         S = np.maximum(S, 1e-12)
         self.normalization_ = np.dot(U / np.sqrt(S), V)
+        K_q_inv = self.normalization_.T @ self.normalization_
         self.components_ = basis
         self.component_indices_ = inds
         return self
@@ -142,16 +141,15 @@ class Nystrom_N:
             K[np.array] = Nystrom approximation to kernel'''
         
         K_nq = self._pairwise_kernels(x, self.components_, self.kernel)
-        K_approx = K_nq @ self.normalization_ @ K_nq.T
+        K_q_inv = self.normalization_.T @ self.normalization_
+        K_approx = K_nq @ K_q_inv @ K_nq.T
 
         return K_approx
 
 
-
-
 ##########################################################################
 
-# Same as LazyNystrom_N but written with Pytorch
+# Same as Nystrom_N but written with Pytorch: need to remove lazy tensor wrapper
 
 class LazyNystrom_T:
     '''
@@ -267,6 +265,7 @@ class LazyNystrom_T:
 
 
 ################################################################################
+
 class Nystrom_NK:
     '''
         Class to implement Nystrom using numpy and PyKeops.
@@ -283,7 +282,8 @@ class Nystrom_NK:
         n_components [int] = how many samples to select from data.
         kernel [str] = type of kernel to use. Current options = {rbf}.
         sigma [float] = exponential constant for the RBF kernel. 
-        eps[float] = size for square bins
+        eps[float] = size for square bins in block-sparse preprocessing.
+        inv_eps [float] = additive invertibility constant for matrix decomposition.
         random_state=[None, float] = to set a random seed for the random
                                      sampling of the samples. To be used when 
                                      reproducibility is needed.
@@ -291,13 +291,21 @@ class Nystrom_NK:
     '''
   
     def __init__(self, n_components=100, kernel='rbf', sigma:float = 1., 
-                 eps:float = 0.05, random_state=None): 
+                 eps:float = 0.05, inv_eps:float = None, random_state=None): 
 
         self.n_components = n_components
         self.kernel = kernel
         self.random_state = random_state
         self.sigma = sigma
         self.eps = eps
+        self.dtype = np.float32
+        if inv_eps:
+            self.inv_eps = inv_eps
+        else:
+            if kernel == 'linear':
+                self.inv_eps = 1e-4
+            else:
+                self.inv_eps = 1e-8
 
 
     def fit(self, x:np.ndarray):
@@ -307,10 +315,13 @@ class Nystrom_NK:
         Returns: Fitted instance of the class
 
         '''
-
+        
         # Basic checks
         assert type(x) == np.ndarray, 'Input to fit(.) must be an array.'
         assert x.shape[0] >= self.n_components, f'The application needs X.shape[0] >= n_components.'
+
+        # Update dtype
+        self._update_dtype(x)
 
         # Number of samples
         n_samples = x.shape[0]
@@ -325,6 +336,7 @@ class Nystrom_NK:
         S, U = self._spectral(basis_kernel)
         S = np.maximum(S, 1e-12)
         self.normalization_ = np.dot(U / np.sqrt(S), U.T)
+        K_q_inv = self.normalization_.T @ self.normalization_
         self.components_ = basis
         self.component_indices_ = inds
         return self
@@ -343,7 +355,7 @@ class Nystrom_NK:
         if y is None:
             y = x
         if kernel == 'linear': 
-            K = x @ y.T 
+            K_ij = x @ y.T 
         elif kernel == 'rbf':
             x /= sigma
             y /= sigma
@@ -363,12 +375,18 @@ class Nystrom_NK:
         '''
         Helper function to compute eigendecomposition of K_q.
 
+        Written using LinearOperators which are lazy
+        representations of sparse and/or structured data.
+
         Args: X_i[numpy LazyTensor]
 
         Returns S[np.array] eigenvalues,
                 U[np.array] eigenvectors
         '''
+
         K_linear = aslinearoperator(X_i)
+        # K <- K + eps
+        K_linear = K_linear + IdentityOperator(K_linear.shape, dtype=self.dtype) * self.inv_eps
         k = K_linear.shape[0] - 1
         S, U = eigsh(K_linear, k=k, which='LM')
         return S, U
@@ -397,9 +415,10 @@ class Nystrom_NK:
             K[np.array] = Nystrom approximation to kernel'''
        
         K_nq = self._pairwise_kernels(x, self.components_, self.kernel)
-        # For arrays: K_approx = K_nq @ self.normalization_ @ K_nq.T
+        # For arrays: K_approx = K_nq @ K_q_inv @ K_nq.T
         # But to use @ with lazy tensors we have:
-        K_approx = K_nq @ (K_nq @ self.normalization_ ).T
+        K_q_inv = self.normalization_.T @ self.normalization_
+        K_approx = K_nq @ (K_nq @ K_q_inv ).T
         
         return K_approx.T 
 
@@ -437,3 +456,17 @@ class Nystrom_NK:
         K_ij.ranges = ranges_ij  # block-sparsity pattern
 
         return K_ij
+
+    def _update_dtype(self,x):
+        ''' Helper function that sets dtype to that of 
+            the given data in the fitting step.
+            
+        Args:
+            x [np.array] = raw data to remap
+        Returns:
+            nothing
+            
+        '''
+
+        self.dtype = x.dtype
+        self.inv_eps = np.array([self.inv_eps]).astype(np.float32)[0]

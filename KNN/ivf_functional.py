@@ -11,7 +11,6 @@ Original file is located at
 #!pip install pykeops[full] > install.log
 import pykeops
 pykeops.clean_pykeops()
-import time
 import torch
 from pykeops.torch import LazyTensor
 import numpy as np
@@ -23,10 +22,10 @@ dtype = torch.float32 if use_cuda else torch.float64
 if use_cuda:
     torch.cuda.synchronize()
 
-def KMeans(x, K=10, Niter=10, verbose=False):
+def KMeans(x, K=10, Niter=10):
     """Implements Lloyd's algorithm for the Euclidean metric."""
 
-    start = time.time()
+
     N, D = x.shape  # Number of samples, dimension of the ambient space
 
     c = x[:K, :].clone()  # Simplistic initialization for the centroids
@@ -48,27 +47,13 @@ def KMeans(x, K=10, Niter=10, verbose=False):
         # Compute the sum of points per cluster:
         c.zero_() #sets c to 0
         #scatter_add_(dim,index,src) 
-        #https://pytorch-scatter.readthedocs.io/en/1.3.0/functions/add.html
-        #adds elements of a source by allocating using a indexing vector
+
         c.scatter_add_(0, cl[:, None].repeat(1, D), x) #[50,2], obtains the sum of all values that are in the same cluster
         #repeat basically duplicates the whole vector once and concatenates to itself
 
         # Divide by the number of points per cluster:
         Ncl = torch.bincount(cl, minlength=K).type_as(c).view(K, 1)#bincount gives number of bins per cluster
         c /= Ncl  # in-place division to compute the average
-
-    if verbose:  # Fancy display -----------------------------------------------
-        if use_cuda:
-            torch.cuda.synchronize()
-        end = time.time()
-        print(
-            f"K-means for the Euclidean metric with {N:,} points in dimension {D:,}, K = {K:,}:"
-        )
-        print(
-            "Timing for {} iterations: {:.5f}s = {} x {:.5f}s\n".format(
-                Niter, end - start, Niter, (end - start) / Niter
-            )
-        )
 
     return cl, c
 
@@ -83,7 +68,6 @@ def k_argmin_torch(x,y,k=5):
   sort,idx=torch.sort(d,dim=1)
   return idx[:,:k]
   
-  
 class IVF_flat():
   def __init__(self,k=5):
     self.c=None
@@ -93,7 +77,7 @@ class IVF_flat():
     self.x=None
     self.keep=None
     self.x_ranges=None
-  def fit(self,x,use_torch=True,clusters=50):
+  def fit(self,x,use_torch=True,clusters=50,a=5):
     
     cl, c = KMeans(x,clusters)
 
@@ -110,13 +94,13 @@ class IVF_flat():
     #get KNN graph for the clusters
     if use_torch:
 
-      self.ncl=k_argmin_torch(c,c)
+      self.ncl=k_argmin_torch(c,c,k=a)
     else:
         
       c1=LazyTensor(c.unsqueeze(1)) 
       c2=LazyTensor(c.unsqueeze(0))
       d=((c1-c2)** 2).sum(-1)
-      self.ncl=d.argKmin(K=self.k,dim=1) 
+      self.ncl=d.argKmin(K=a,dim=1) #get a nearest clusters
 
     #get the ranges and centroids 
     self.x_ranges, _, _ = cluster_ranges_centroids(x, self.cl)
@@ -124,14 +108,26 @@ class IVF_flat():
     #
     
     x, x_labels = sort_clusters(x,self.cl) #sort dataset to match ranges
-    
     self.x=LazyTensor(x.unsqueeze(1))#store dataset
       
-    r=torch.arange(clusters).repeat(self.k,1).T.reshape(-1).long()
+    r=torch.arange(clusters).repeat(a,1).T.reshape(-1).long()
     self.keep= torch.zeros([clusters,clusters], dtype=torch.bool)    
    
     self.keep[r,self.ncl.flatten()]=True        
-  
+
+    return self
+  def sorted(self,x,labels=None):
+    if labels is None:
+      labels=self.cl
+    x,_=sort_clusters(x,labels)
+    return x
+  def clusters(self):
+    return self.c
+  def assign(self,x,c=None):
+    if c is None:
+      c=self.c
+    return k_argmin(x,c,self.k)
+    
   def kneighbors(self,y):
     if use_cuda:
         torch.cuda.synchronize()
