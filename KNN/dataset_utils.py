@@ -78,7 +78,7 @@ def get_dataset(key=None,**kwargs):
         else:
             x_train = np.random.randn(Ntrain, D)
             x_test = np.random.randn(Ntest, D)      
-    elif keu is None:
+    elif key is None:
         raise ValueError('Either key or specific details are needed')
     elif key in synthetic.keys():
         metric, Ntrain, Ntest, D = synthetic[key]
