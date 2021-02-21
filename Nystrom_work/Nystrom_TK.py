@@ -1,4 +1,6 @@
 # !pip install pykeops[full] > install.log
+# colab for this code
+# https://colab.research.google.com/drive/1vF2cOSddbRFM5PLqxkIzyZ9XkuzO5DKN?usp=sharing
 import numpy as np
 import torch
 import pykeops
