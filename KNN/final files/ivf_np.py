@@ -79,7 +79,6 @@ class ivf():
     self.__use_gpu=use_gpu
     cl, c = self.__KMeans(x,clusters,Niter=n)
     self.__c=c
-    self.__k_argmin(x,c)
     cl=self.__assign(x)
 
     ncl=self.__k_argmin(c,c,k=a)

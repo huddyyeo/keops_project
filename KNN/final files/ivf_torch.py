@@ -11,9 +11,7 @@ if use_cuda:
 class ivf():
   def __init__(self,k=5):
     self.__c=None
-    self.__cl=None
     self.__k=k
-    self.__ncl=None
     self.__x=None
     self.__keep=None
     self.__x_ranges=None
@@ -78,18 +76,18 @@ class ivf():
     cl, c = self.__KMeans(x,clusters,Niter=n)
     self.__c=c
 
-    self.__cl=self.__assign(x)
+    cl=self.__assign(x)
     if use_cuda:
         torch.cuda.synchronize()
 
-    self.__ncl=self.__k_argmin(c,c,k=a)
-    self.__x_ranges, _, _ = cluster_ranges_centroids(x, self.__cl)
+    ncl=self.__k_argmin(c,c,k=a)
+    self.__x_ranges, _, _ = cluster_ranges_centroids(x, cl)
     
-    x, x_labels = self.__sort_clusters(x,self.__cl,store_x=True)
+    x, x_labels = self.__sort_clusters(x,cl,store_x=True)
     self.__x=x
     r=torch.arange(clusters).repeat(a,1).T.reshape(-1).long()
     self.__keep= torch.zeros([clusters,clusters], dtype=torch.bool).to(self.__device)  
-    self.__keep[r,self.__ncl.flatten()]=True    
+    self.__keep[r,ncl.flatten()]=True    
     return self
 
 
@@ -98,7 +96,7 @@ class ivf():
       c=self.__c
     return self.__k_argmin(x,c)
     
-  def kneighbors(self,y,sparse=True):
+  def kneighbors(self,y):
     '''
     Obtain the k nearest neighbors of the query dataset y
     '''
@@ -106,8 +104,6 @@ class ivf():
       raise ValueError('Input dataset not fitted yet! Call .fit() first!')
     if type(y)!=torch.Tensor:
       raise ValueError("Query dataset must be a torch tensor")
-    if type(sparse)!=bool:
-      raise ValueError('Sparsity is a boolean input')
     if y.device!=self.__device:
       raise ValueError('Input dataset and query dataset must be on same device')
     if len(y.shape)!=2:
