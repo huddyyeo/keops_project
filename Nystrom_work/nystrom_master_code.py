@@ -527,7 +527,7 @@ class Nystrom_NK_x:
 
 #################################################################################
 
-class Nystrom_NK_x:
+class Nystrom_NK:
     '''
         Class to implement Nystrom using numpy and PyKeops.
         * The fit method computes K^{-1}_q.
@@ -697,7 +697,7 @@ class Nystrom_NK_x:
             x /= self.exp_sigma
             y /= self.exp_sigma
             x_i, x_j = LazyTensor_n(x[:, None, :]), LazyTensor_n(y[None, :, :])
-            K_ij = (-1 * ((x_i - x_j) ** 2).sqrt().sum(2)).exp()
+            K_ij = (- ( ((x_i - x_j) ** 2).sqrt().sum(2))).exp()
             # block-sparse reduction preprocess
             K_ij = self._Gauss_block_sparse_pre(x, y, K_ij) # TODO 
        
