@@ -19,6 +19,30 @@ from scipy.sparse.linalg.interface import IdentityOperator
 
 ################################################################################
 # Same as LazyNystrom_T but written with pyKeOps
+import numpy as np
+import torch
+import pykeops
+
+from pykeops.numpy import LazyTensor as LazyTensor_n
+from pykeops.torch.cluster import grid_cluster
+from pykeops.torch.cluster import from_matrix
+from pykeops.torch.cluster import cluster_ranges_centroids, cluster_ranges
+from pykeops.torch.cluster import sort_clusters
+from pykeops.torch import LazyTensor
+
+from sklearn.utils import check_random_state, as_float_array
+from scipy.linalg import svd
+
+from scipy.sparse.linalg import aslinearoperator, eigsh
+from scipy.sparse.linalg.interface import IdentityOperator
+from pykeops.torch import Genred
+
+import matplotlib.pyplot as plt
+import time
+
+
+################################################################################
+# Same as LazyNystrom_T but written with pyKeOps
 
 class LazyNystrom_TK:
     '''
@@ -89,31 +113,12 @@ class LazyNystrom_TK:
         basis_kernel = self._pairwise_kernels(basis, kernel=self.kernel)
         # Get SVD
         U, S, V = torch.svd(basis_kernel)
-        # S,U = self._spectral(basis_kernel)
         S = torch.maximum(S, torch.ones(S.size()) * 1e-12)
         self.normalization_ = torch.mm(U / np.sqrt(S), V.t())
         self.components_ = basis
         self.component_indices_ = inds
 
         return self
-
-    def _spectral(self, X_i: LazyTensor):
-        '''
-        Helper function to compute eigendecomposition of K_q.
-        Written using LinearOperators which are lazy
-        representations of sparse and/or structured data.
-        Args: X_i[numpy LazyTensor]
-        Returns S[np.array] eigenvalues,
-                U[np.array] eigenvectors
-        '''
-        K_linear = aslinearoperator(X_i)
-        # K <- K + eps
-        K_linear = K_linear + IdentityOperator(K_linear.shape, dtype=self.dtype) * self.inv_eps
-        k = K_linear.shape[0] - 1
-        eig = eigsh(K_linear, k=k)
-        S, U = eig
-
-        return torch.tensor(S), torch.tensor(U)
 
     def transform(self, X: torch.tensor) -> torch.tensor:
         ''' Applies transform on the data.
@@ -144,7 +149,6 @@ class LazyNystrom_TK:
         Returns:
                 K_ij[LazyTensor]
         '''
-
         if y is None:
             y = x
         if kernel == 'linear':
@@ -154,16 +158,19 @@ class LazyNystrom_TK:
             y /= sigma
 
             x_i, x_j = LazyTensor(x[:, None, :]), LazyTensor(y[None, :, :])
+            K_ij = (-1 * ((x_i - x_j) ** 2).sum(-1)).exp()
 
-            K_ij = (-1 * ((x_i - x_j) ** 2).sum(2)).exp()
             # block-sparse reduction preprocess
             K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
 
+
         elif kernel == 'exp':
             x_i, x_j = LazyTensor(x[:, None, :]), LazyTensor(y[None, :, :])
-            K_ij = (-1 * ((x_i - x_j) ** 2).sqrt().sum(2)).exp()
+            K_ij = (-1 * ((x_i - x_j) ** 2).sum().sqrt()).exp()
             # block-sparse reduction preprocess
             K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)  # TODO
+
+        K_ij = K_ij @ torch.diag(torch.ones(K_ij.shape[1]))  # make 1 on diag only
 
         K_ij.backend = self.backend
         return K_ij
@@ -184,20 +191,18 @@ class LazyNystrom_TK:
         # labels for low dimensions
 
         if x.shape[1] < 4 or y.shape[1] < 4:
-            print('dim<4')
+
             x_labels = grid_cluster(x, self.eps)
             y_labels = grid_cluster(y, self.eps)
             # range and centroid per class
-            print(x_labels.shape)
             x_ranges, x_centroids, _ = cluster_ranges_centroids(x, x_labels)
             y_ranges, y_centroids, _ = cluster_ranges_centroids(y, y_labels)
         else:
             # labels for higher dimensions
-            print("dim>3")
+
             x_labels, x_centroids = self._KMeans(x)
             y_labels, y_centroids = self._KMeans(y)
             # compute ranges
-            print(x_labels.shape)
             x_ranges = cluster_ranges(x_labels)
             y_ranges = cluster_ranges(y_labels)
 
@@ -210,7 +215,7 @@ class LazyNystrom_TK:
         # mask -> set of integer tensors
         ranges_ij = from_matrix(x_ranges, y_ranges, keep)
         K_ij.ranges = ranges_ij  # block-sparsity pattern
-        K_ij = K_ij.sum(dim=0)
+
         return K_ij
 
     def _KMeans(self, x: torch.tensor):
@@ -239,3 +244,14 @@ class LazyNystrom_TK:
 
         return labels, clusters
 
+    def _update_dtype(self, x):
+        ''' Helper function that sets inv_eps to dtype to that of
+            the given data in the fitting step.
+
+        Args:
+            x [np.array] = raw data to remap
+        Returns:
+            nothing
+        '''
+        self.dtype = x.dtype
+        self.inv_eps = np.array([self.inv_eps]).astype(self.dtype)[0]
