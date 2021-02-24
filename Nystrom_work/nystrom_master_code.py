@@ -526,11 +526,9 @@ class Nystrom_NK_x:
 
 
 #################################################################################
-class Nystrom_NK_x_2:
+
+class Nystrom_NK_x:
     '''
-
-    SVD SVD SVD SVD SVD 
-
         Class to implement Nystrom using numpy and PyKeops.
         * The fit method computes K^{-1}_q.
         * The transform method maps the data into the feature space underlying
@@ -540,6 +538,7 @@ class Nystrom_NK_x_2:
         n_components [int] = how many samples to select from data.
         kernel [str] = type of kernel to use. Current options = {rbf}.
         sigma [float] = exponential constant for the RBF kernel. 
+        exp_sigma [float] = exponential constant for the exponential kernel.
         eps[float] = size for square bins in block-sparse preprocessing.
         k_means[int] = number of centroids for KMeans algorithm in block-sparse 
                        preprocessing.
@@ -547,25 +546,34 @@ class Nystrom_NK_x_2:
         dtype[type] = type of data: np.float32 or np.float64
         inv_eps[float] = additive invertibility constant for matrix decomposition.
         backend[string] = "GPU" or "CPU" mode
+        verbose[boolean] = set True to print details
         random_state=[None, float] = to set a random seed for the random
                                      sampling of the samples. To be used when 
                                      reproducibility is needed.
     '''
   
-    def __init__(self, n_components=100, kernel='rbf', sigma:float = 1., 
-                 eps:float = 0.05, k_means = 10, n_iter:int = 10,
-                 inv_eps:float = None, dtype = np.float32, 
-                 backend = 'CPU', random_state=None): 
+    def __init__(self, n_components=100, kernel='rbf', sigma:float = 1.,
+                 exp_sigma:float = 1.0, eps:float = 0.05, mask_radius:float = None,
+                 k_means = 10, n_iter:int = 10, inv_eps:float = None, dtype = np.float32, 
+                 backend = None, verbose = False, random_state=None): 
 
         self.n_components = n_components
         self.kernel = kernel
         self.random_state = random_state
         self.sigma = sigma
+        self.exp_sigma = exp_sigma
         self.eps = eps
+        self.mask_radius = mask_radius
         self.k_means = k_means
         self.n_iter = n_iter
         self.dtype = dtype
-        self.backend = backend # conditional here
+        self.verbose = verbose
+
+        if not backend:
+            self.backend = 'GPU' if pykeops.config.gpu_available else 'CPU'
+        else:
+            self.backend = backend
+
         if inv_eps:
             self.inv_eps = inv_eps
         else:
@@ -574,16 +582,25 @@ class Nystrom_NK_x_2:
             else:
                 self.inv_eps = 1e-8
 
+        if not mask_radius:
+            if kernel == 'rbf':
+                self.mask_radius = 2* np.sqrt(2) * self.sigma
+            elif kernel == 'exp':
+                self.mask_radius = 8 * self.exp_sigma
+
 
     def fit(self, x:np.ndarray):
         ''' 
         Args:   x = numpy array of shape (n_samples, n_features)
         Returns: Fitted instance of the class
         '''
+        if self.verbose:
+            print(f'Working with backend = {self.backend}')
         
         # Basic checks
         assert type(x) == np.ndarray, 'Input to fit(.) must be an array.'
         assert x.shape[0] >= self.n_components, f'The application needs X.shape[0] >= n_components.'
+        assert self.exp_sigma > 0, 'Should be working with decaying exponential.'
 
         # Update dtype
         self._update_dtype(x)
@@ -595,17 +612,11 @@ class Nystrom_NK_x_2:
         basis_inds = inds[:self.n_components] 
         basis = x[basis_inds]
         # Build smaller kernel
-        b_pairwise = time.time()
         basis_kernel = self._pairwise_kernels(basis)
-        a_pairwise = time.time()
-        print(f'Time on pairwise_kernels = {a_pairwise - b_pairwise}')
         # Spectral decomposition
-        b_spectral = time.time()
-        U, S, Vh = self._spectral(basis_kernel)
-        a_spectral = time.time()
-        print(f'Time on spectral = {a_spectral - b_spectral}')
+        S, U = self._spectral(basis_kernel)
         S = np.maximum(S, 1e-12)
-        self.normalization_ = np.dot(U / np.sqrt(S), Vh)
+        self.normalization_ = np.dot(U / np.sqrt(S), U.T)
         K_q_inv = self.normalization_.T @ self.normalization_
         self.components_ = basis
         self.component_indices_ = inds
@@ -622,20 +633,13 @@ class Nystrom_NK_x_2:
         Returns S[np.array] eigenvalues,
                 U[np.array] eigenvectors
         '''
-        # K_linear = aslinearoperator(X_i)
+        K_linear = aslinearoperator(X_i)
         # K <- K + eps
-        start = time.time()
-        K = X_i @ np.ones(X_i.shape, dtype=self.dtype) + self.inv_eps * np.ones(X_i.shape, dtype=self.dtype)
-        end = time.time()
-        print(f'Time on reduction inside spectral = {end - start}')
-        # K_linear = K_linear + IdentityOperator(K_linear.shape, dtype=self.dtype) * self.inv_eps
-        # k = K_linear.shape[0] - 1
-        b_eigsh = time.time()
-        # S, U = eigsh(K_linear, k=k, which='LM')
-        U, S, Vh = svd(K)
-        a_eigsh = time.time()
-        print(f'Time on svd (inside spectral) = {a_eigsh - b_eigsh}')
-        return U, S, Vh
+        K_linear = K_linear + IdentityOperator(K_linear.shape, dtype=self.dtype) * self.inv_eps
+        k = K_linear.shape[0] - 1
+        S, U = eigsh(K_linear, k=k, which='LM')
+
+        return S, U
         
 
     def transform(self, x:np.ndarray) -> np.array:
@@ -686,20 +690,16 @@ class Nystrom_NK_x_2:
             x /= self.sigma
             y /= self.sigma
             x_i, x_j = LazyTensor_n(x[:, None, :]), LazyTensor_n(y[None, :, :])
-            K_ij = (-1*((x_i - x_j)**2).sum(2)).exp()
+            K_ij = ( -(( (x_i - x_j)**2 ).sum(dim=2) ) ).exp()
             # block-sparse reduction preprocess
-            b_preprocess = time.time()
             K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
-            a_preprocess = time.time()
-            print(f'Time on preprocessing (inside of pairwise_kernels) = {a_preprocess - b_preprocess}')
-
         elif self.kernel == 'exp':
-            x /= self.sigma
-            y /= self.sigma
+            x /= self.exp_sigma
+            y /= self.exp_sigma
             x_i, x_j = LazyTensor_n(x[:, None, :]), LazyTensor_n(y[None, :, :])
             K_ij = (-1 * ((x_i - x_j) ** 2).sqrt().sum(2)).exp()
             # block-sparse reduction preprocess
-            K_ij = self._Gauss_block_sparse_pre(x, y, K_ij) # needs work
+            K_ij = self._Gauss_block_sparse_pre(x, y, K_ij) # TODO 
        
         K_ij.backend = self.backend
         
@@ -721,7 +721,6 @@ class Nystrom_NK_x_2:
         '''
         # labels for low dimensions
         if x.shape[1] < 4 or y.shape[1] < 4:
-            print('Simple preprocessing')
             x_labels = grid_cluster(x, self.eps) 
             y_labels = grid_cluster(y, self.eps) 
             # range and centroid per class
@@ -739,8 +738,11 @@ class Nystrom_NK_x_2:
         x, x_labels = sort_clusters(x, x_labels)
         y, y_labels = sort_clusters(y, y_labels) 
         # Compute a coarse Boolean mask:
-        D = np.sum((x_centroids[:, None, :] - y_centroids[None, :, :]) ** 2, 2)
-        keep = D < (4 * self.sigma) ** 2
+        if self.kernel == 'rbf':
+            D = np.sum((x_centroids[:, None, :] - y_centroids[None, :, :]) ** 2, 2)
+        elif self.kernel == 'exp':
+            D = np.sum((x_centroids[:, None, :] - y_centroids[None, :, :]) ** 2, 2).sqrt()
+        keep = D < (self.mask_radius) ** 2
         # mask -> set of integer tensors
         ranges_ij = from_matrix(x_ranges, y_ranges, keep)
         K_ij.ranges = ranges_ij  # block-sparsity pattern
@@ -750,7 +752,6 @@ class Nystrom_NK_x_2:
 
     def _KMeans(self,x:np.array):
         ''' KMeans with Pykeops to do binning of original data.
-
         Args:
             x[np.array] = data
             k_means[int] = number of bins to build
@@ -768,7 +769,6 @@ class Nystrom_NK_x_2:
             clusters_j = LazyTensor_n(clusters[None, :, :])  
             D_ij = ((x_i - clusters_j) ** 2).sum(-1)  # points-clusters kernel
             labels = D_ij.argmin(axis=1).astype(int).reshape(N)  # Points -> Nearest cluster
-
             Ncl = np.bincount(labels).astype(self.dtype)  # Class weights
             for d in range(D):  # Compute the cluster centroids with np.bincount:
                 clusters[:, d] = np.bincount(labels, weights=x[:, d]) / Ncl
