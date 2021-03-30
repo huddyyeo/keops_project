@@ -14,8 +14,15 @@ from pykeops.torch import LazyTensor
 from scipy.sparse.linalg import aslinearoperator, eigsh
 from scipy.sparse.linalg.interface import IdentityOperator
 
-    
-class Nystrom_NK:
+from typing import Tuple
+
+
+
+
+
+
+
+class Nystrom_n:
     '''
         Class to implement Nystrom using numpy and PyKeops.
         * The fit method computes K^{-1}_q.
@@ -41,14 +48,13 @@ class Nystrom_NK:
                                      reproducibility is needed.
     '''
   
-    def __init__(self, n_components=100, kernel='rbf', sigma:float = 1.,
+    def __init__(self, n_components=100, kernel='rbf', sigma:float = None,
                  exp_sigma:float = 1.0, eps:float = 0.05, mask_radius:float = None,
                  k_means = 10, n_iter:int = 10, inv_eps:float = None, dtype = np.float32, 
                  backend = None, verbose = False, random_state=None): 
 
         self.n_components = n_components
         self.kernel = kernel
-        self.random_state = random_state
         self.sigma = sigma
         self.exp_sigma = exp_sigma
         self.eps = eps
@@ -56,6 +62,7 @@ class Nystrom_NK:
         self.k_means = k_means
         self.n_iter = n_iter
         self.dtype = dtype
+        self.random_state = random_state
         self.verbose = verbose
 
         if not backend:
@@ -68,14 +75,8 @@ class Nystrom_NK:
         else:
             self.inv_eps = 1e-8
 
-        if not mask_radius:
-            if kernel == 'rbf':
-                self.mask_radius = 2* np.sqrt(2) * self.sigma
-            elif kernel == 'exp':
-                self.mask_radius = 8 * self.exp_sigma
 
-
-    def fit(self, x:np.ndarray):
+    def fit(self, x:np.ndarray) -> 'Nystrom_n':
         ''' 
         Args:   x = numpy array of shape (n_samples, n_features)
         Returns: Fitted instance of the class
@@ -88,6 +89,15 @@ class Nystrom_NK:
         assert x.shape[0] >= self.n_components, 'The application needs X.shape[0] >= n_components.'
         assert self.exp_sigma > 0, 'Should be working with decaying exponential.'
 
+        # Set default gamma
+        if self.sigma is None:
+            self.sigma = np.sqrt(x.shape[1])
+
+        if not self.mask_radius:
+            if self.kernel == 'rbf':
+                self.mask_radius = 2* np.sqrt(2) * self.sigma
+            elif self.kernel == 'exp':
+                self.mask_radius = 8 * self.exp_sigma
         # Update dtype
         self._update_dtype(x)
         # Number of samples
@@ -98,7 +108,7 @@ class Nystrom_NK:
         basis_inds = inds[:self.n_components] 
         basis = x[basis_inds]
         # Build smaller kernel
-        basis_kernel = self._pairwise_kernels(basis, dense=False)
+        basis_kernel = self._pairwise_kernels(basis, dense=True)
         # Spectral decomposition
         S, U = self._spectral(basis_kernel)
         S = np.maximum(S, 1e-12)
@@ -109,7 +119,7 @@ class Nystrom_NK:
         return self
 
 
-    def _spectral(self, X_i:LazyTensor):
+    def _spectral(self, X_i:LazyTensor) -> Tuple[np.array]:
         '''
         Helper function to compute eigendecomposition of K_q.
         Written using LinearOperators which are lazy
@@ -170,24 +180,25 @@ class Nystrom_NK:
         Returns:
                 K_ij[LazyTensor] if dense = False
                 K_ij[np.array] if dense = True
-
         '''
         if y is None:
             y = x
         if self.kernel == 'rbf':
-            x /= self.sigma
-            y /= self.sigma
+            x = x / self.sigma
+            y = y / self.sigma
             if dense:
                 x_i, x_j = x[:, None, :], y[None, :, :]
-                K_ij = np.exp( -(( (x_i - x_j)**2 ).sum(axis=2)) )
+                D_ij = ( (x_i - x_j)**2 ).sum(axis=2)
+                K_ij = np.exp(-D_ij )
             else:
                 x_i, x_j = LazyTensor_n(x[:, None, :]), LazyTensor_n(y[None, :, :])
-                K_ij = ( -(( (x_i - x_j)**2 ).sum(dim=2) ) ).exp()
+                D_ij = ( (x_i - x_j)**2 ).sum(dim=2)
+                K_ij = (-D_ij).exp()
                 # block-sparse reduction preprocess
                 K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
         elif self.kernel == 'exp':
-            x /= self.exp_sigma
-            y /= self.exp_sigma
+            x = x / self.exp_sigma
+            y = y / self.exp_sigma
             if dense:
                 x_i, x_j = x[:, None, :], y[None, :, :]
                 K_ij =  np.exp(-np.sqrt( ( ((x_i - x_j) ** 2).sum(axis=2) )))
@@ -195,7 +206,7 @@ class Nystrom_NK:
                 x_i, x_j = LazyTensor_n(x[:, None, :]), LazyTensor_n(y[None, :, :])
                 K_ij = (-(((x_i - x_j) ** 2).sum(-1)).sqrt()).exp()
                 # block-sparse reduction preprocess
-                K_ij = self._Gauss_block_sparse_pre(x, y, K_ij) # TODO 
+                K_ij = self._Gauss_block_sparse_pre(x, y, K_ij) 
        
         if not dense:
             K_ij.backend = self.backend
@@ -287,7 +298,6 @@ class Nystrom_NK:
 
     def _check_random_state(self, seed):
         '''Set/get np.random.RandomState instance for permutation
-
         Args
             seed[None, int] 
         Returns:
