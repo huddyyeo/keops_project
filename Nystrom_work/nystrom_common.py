@@ -30,7 +30,7 @@ class GenericNystrom:
                  eps:float = 0.05, mask_radius:float = None, k_means:int = 10, 
                  n_iter:int = 10, inv_eps:float = None, dtype = np.float32, 
                  backend:str = None, verbose:bool = False, 
-                 random_state=Union[None,int], tools = None): 
+                 random_state:Union[None,int] = None, tools = None): 
 
         ''' 
         n_components  = how many samples to select from data.
