@@ -3,6 +3,7 @@ import numpy as np
 from pykeops.numpy import Genred, default_dtype, KernelSolve
 from pykeops.numpy.cluster import swap_axes as np_swap_axes
 import pykeops.config
+from pykeops.numpy import LazyTensor
 
 
 class numpytools:
@@ -89,7 +90,6 @@ class numpytools:
     @staticmethod
     def device(x):
         return "cpu"
-    
 
     ##### Added for Nystrom // check inconsistency with main branch utils
     
@@ -98,12 +98,17 @@ class numpytools:
         return np.sqrt(x)
 
     @staticmethod
-    def bincount(x):
-        return np.bincount(x)
+    def bincount(x, weights=None):
+        return np.bincount(x, weights)
     
     @staticmethod
     def is_tensor(x):
         return isinstance(x, np.ndarray)
+
+    @staticmethod
+    def LazyTensor(x):
+        return LazyTensor(x)
+
 
 
 def squared_distances(x, y):

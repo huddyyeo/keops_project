@@ -1,4 +1,3 @@
-""" Numpy class"""
 import numpy as np
 
 from pykeops.numpy import LazyTensor
@@ -10,10 +9,10 @@ from pykeops.numpy.cluster import sort_clusters
 from scipy.sparse.linalg import aslinearoperator, eigsh
 from scipy.sparse.linalg.interface import IdentityOperator
 
-from nystrom_common import Nystrom_common
+from nystrom_common import GenericNystrom
 from numpy_utils import numpytools
 
-class Nystrom_NK(Nystrom_common):
+class Nystrom_NK(GenericNystrom):
 
     def __init__(self, n_components=100, kernel='rbf', sigma:float = None,
                  eps:float = 0.05, mask_radius:float = None, k_means = 10, 
@@ -25,9 +24,9 @@ class Nystrom_NK(Nystrom_common):
         
         self.tools = numpytools
         
-    def _decomposition_and_norm(self, basis_kernel):
+    def _decomposition_and_norm(self, X:LazyTensor) -> np.array:
 
-        K_linear = aslinearoperator(basis_kernel)
+        K_linear = aslinearoperator(X)
         # K <- K + eps
         K_linear = K_linear + IdentityOperator(K_linear.shape, dtype=self.dtype) * self.inv_eps
         k = K_linear.shape[0] - 1
@@ -36,20 +35,18 @@ class Nystrom_NK(Nystrom_common):
 
         return np.dot(U / np.sqrt(S), U.T)
 
-    def K_approx(self, x:np.array) -> np.array:
+    def K_approx(self, x:np.array) -> 'LinearOperator':
         ''' Function to return Nystrom approximation to the kernel.
         
         Args:
-            X[np.array] = data used in fit(.) function.
+            X = data used in fit(.) function.
         Returns
-            K[np.array] = Nystrom approximation to kernel'''
+            K = Nystrom approximation to kernel'''
     
         K_nq = self._pairwise_kernels(x, self.components_, dense=True)
-        # For arrays: K_approx = K_nq @ K_q_inv @ K_nq.T
-        # But to use @ with lazy tensors we have:
         K_q_inv = self.normalization_.T @ self.normalization_
-        K_approx = K_nq @ (K_nq @ K_q_inv ).T
-        return K_approx.T 
+        K_approx = K_nq @ K_q_inv @ K_nq.T
+        return aslinearoperator(K_approx) 
 
     def _astype(self, data, d_type):
         return data.astype(d_type)
