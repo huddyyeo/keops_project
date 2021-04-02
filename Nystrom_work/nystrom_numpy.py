@@ -1,10 +1,6 @@
 import numpy as np
 
 from pykeops.numpy import LazyTensor
-from pykeops.numpy.cluster import grid_cluster
-from pykeops.numpy.cluster import from_matrix
-from pykeops.numpy.cluster import cluster_ranges_centroids, cluster_ranges
-from pykeops.numpy.cluster import sort_clusters
 
 from scipy.sparse.linalg import aslinearoperator, eigsh
 from scipy.sparse.linalg.interface import IdentityOperator
@@ -12,7 +8,10 @@ from scipy.sparse.linalg.interface import IdentityOperator
 from nystrom_common import GenericNystrom
 from numpy_utils import numpytools
 
+
+
 class Nystrom_NK(GenericNystrom):
+    '''Nystrom class to work with Numpy arrays'''
 
     def __init__(self, n_components=100, kernel='rbf', sigma:float = None,
                  eps:float = 0.05, mask_radius:float = None, k_means = 10, 
