@@ -1,16 +1,12 @@
 import numpy as np
+
 from scipy.linalg import svd
-
-from pykeops.numpy import LazyTensor
-
-from scipy.sparse.linalg import aslinearoperator, eigsh
-from scipy.sparse.linalg.interface import IdentityOperator
+from scipy.sparse.linalg import aslinearoperator
 
 from nystrom_common import GenericNystrom
 from numpy_utils import numpytools
 
-
-class Nystrom_NK(GenericNystrom):
+class Nystrom(GenericNystrom):
     '''Nystrom class to work with Numpy arrays'''
 
     def __init__(self, n_components=100, kernel='rbf', sigma:float = None,
@@ -22,16 +18,17 @@ class Nystrom_NK(GenericNystrom):
                          k_means, n_iter, inv_eps, dtype, backend, verbose, random_state)
         
         self.tools = numpytools
-
-
+        self.backend = 'CPU'
+    
     def _decomposition_and_norm(self, X:np.array) -> np.array:
 
         X = X + np.eye(X.shape[0])*self.inv_eps
         U, S, V = svd(X)
         S = np.maximum(S, 1e-12)
+        
         return np.dot(U / np.sqrt(S), V)
 
-    def K_approx(self, x:np.array) -> 'LinearOperator':
+    def K_approx(self, x:np.array):
         ''' Function to return Nystrom approximation to the kernel.
         
         Args:
@@ -39,7 +36,7 @@ class Nystrom_NK(GenericNystrom):
         Returns
             K = Nystrom approximation to kernel'''
     
-        K_nq = self._pairwise_kernels(x, self.components_, dense=True)
+        K_nq = self._pairwise_kernels(x, self.components_)
         K_q_inv = self.normalization_.T @ self.normalization_
         K_approx = K_nq @ K_q_inv @ K_nq.T
         return aslinearoperator(K_approx) 

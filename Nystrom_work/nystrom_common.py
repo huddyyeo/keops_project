@@ -1,26 +1,11 @@
-# If using colab, make sure you install:
-
-# !apt-get install cuda=10.2.89-1
-# !pip install si_prefix
-# !pip install sphinx
-# !pip install pykeops[full] > log.log
-
-# from common.nystrom import GenericNystrom -> needed when integrating into the lib
-
 import numpy as np
-
 import pykeops
-from pykeops.numpy.cluster import grid_cluster
-from pykeops.numpy.cluster import from_matrix
-from pykeops.numpy.cluster import cluster_ranges_centroids, cluster_ranges
-from pykeops.numpy.cluster import sort_clusters
+from typing import TypeVar, Union
 
-from typing import Tuple, TypeVar, Union
 # Generic placeholder for numpy and torch variables.
 generic_array = TypeVar('generic_array')
 GenericLazyTensor = TypeVar('GenericLazyTensor')
 
-""" Abstract class"""
 
 class GenericNystrom:
     '''Super class defining the Nystrom operations. The end user should
@@ -61,7 +46,7 @@ class GenericNystrom:
         self.tools = None
 
         if not backend:
-            self.backend = 'GPU' if pykeops.config.gpu_available else 'CPU'
+            self.backend = 'cuda' if pykeops.config.gpu_available else 'CPU'
         else:
             self.backend = backend
 
@@ -70,7 +55,7 @@ class GenericNystrom:
         else:
             self.inv_eps = 1e-8
 
-    def fit(self, x:generic_array) -> 'Nystrom_common':
+    def fit(self, x:generic_array) -> 'GenericNystrom':
         ''' 
         Args:   x = array or tensor of shape (n_samples, n_features)
         Returns: Fitted instance of the class
@@ -86,9 +71,10 @@ class GenericNystrom:
         X.shape[0] >= n_components.'
         if self.kernel == 'exp' and not (self.sigma is None):
             assert self.sigma > 0, 'Should be working with decaying exponential.'
-        
+
         # Set default sigma
-        if self.sigma is None and self.kernel == 'rbf':
+        #if self.sigma is None and self.kernel == 'rbf':
+        if self.sigma is None:
             self.sigma = np.sqrt(x.shape[1])
 
         if self.mask_radius is None:
@@ -96,6 +82,9 @@ class GenericNystrom:
                 self.mask_radius = 2* np.sqrt(2) * self.sigma
             elif self.kernel == 'exp':
                 self.mask_radius = 8 * self.sigma
+            
+            else:
+                self.mask_radius = 4*self.sigma
 
         # Update dtype
         self._update_dtype(x)
@@ -181,7 +170,21 @@ class GenericNystrom:
 
                 # block-sparse reduction preprocess
                 K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
-       
+        
+        # computation with custom kernel
+        else:
+            x = x / self.sigma
+            y = y / self.sigma
+        
+            if dense:
+                x_i, x_j = x[:, None, :], y[None, :, :]
+                K_ij =  self.kernel[0](x_i, x_j)
+            else:
+                x_i, x_j = self.tools.LazyTensor(x[:, None, :]), self.tools.LazyTensor(y[None, :, :])
+                K_ij = self.kernel[1](x_i, x_j)
+            
+                # TODO: add in block-sparse reduction preprocess for custom !!
+
         if not dense:
             K_ij.backend = self.backend
         
@@ -204,24 +207,24 @@ class GenericNystrom:
 
         # labels for low dimensions
         if x.shape[1] < 4 or y.shape[1] < 4:
-            x_labels = grid_cluster(x, self.eps) 
-            y_labels = grid_cluster(y, self.eps)
+            x_labels = self.tools.grid_cluster(x, self.eps)
+            y_labels = self.tools.grid_cluster(y, self.eps)
 
             # range and centroid per class
-            x_ranges, x_centroids, _ = cluster_ranges_centroids(x, x_labels)
-            y_ranges, y_centroids, _ = cluster_ranges_centroids(y, y_labels)
+            x_ranges, x_centroids, _ = self.tools.cluster_ranges_centroids(x, x_labels)
+            y_ranges, y_centroids, _ = self.tools.cluster_ranges_centroids(y, y_labels)
 
         else:
         # labels for higher dimensions
-            x_labels, x_centroids = self._KMeans(x)
-            y_labels, y_centroids = self._KMeans(y)
+            x_labels, x_centroids = self.tools.kmeans(x)
+            y_labels, y_centroids = self.tools.kmeans(y)
             # compute ranges
-            x_ranges = cluster_ranges(x_labels)
-            y_ranges = cluster_ranges(y_labels)
+            x_ranges = self.tools.cluster_ranges(x_labels)
+            y_ranges = self.tools.cluster_ranges(y_labels)
 
         # sort points
-        x, x_labels = sort_clusters(x, x_labels)
-        y, y_labels = sort_clusters(y, y_labels)
+        x, x_labels = self.tools.sort_clusters(x, x_labels)
+        y, y_labels = self.tools.sort_clusters(y, y_labels)
 
         # Compute a coarse Boolean mask:
         if self.kernel == 'rbf':
@@ -232,37 +235,15 @@ class GenericNystrom:
 
         keep = D < (self.mask_radius) ** 2
         # mask -> set of integer tensors
-        ranges_ij = from_matrix(x_ranges, y_ranges, keep)
+        ranges_ij = self.tools.from_matrix(x_ranges, y_ranges, keep)
         K_ij.ranges = ranges_ij  # block-sparsity pattern
 
         return K_ij
 
-    def _KMeans(self,x):
-        ''' KMeans with Pykeops to do binning of original data.
-        Args:
-            x[np.array or torch.tensor] = data
-            k_means[int] = number of bins to build
-            n_iter[int] = number iterations of KMeans loop
-        Returns:
-            labels[np.array or torch.tensor] = class labels for each point in x
-            clusters[np.array or torch.tensor] = coordinates for each centroid
-        '''
-        N, D = x.shape  
-        clusters = self.tools.copy(x[:self.k_means, :])  # initialization of clusters
-        x_i = self.tools.LazyTensor(x[:, None, :])  
-
-        for i in range(self.n_iter):
-
-            clusters_j = self.tools.LazyTensor(clusters[None, :, :])  
-            D_ij = ((x_i - clusters_j) ** 2).sum(-1)  # points-clusters kernel
-            labels = self._astype(D_ij.argmin(axis=1), int).reshape(N)  # Points -> Nearest cluster
-            Ncl = self._astype(self.tools.bincount(labels), self.dtype)  # Class weights
-            for d in range(D):  # Compute the cluster centroids with bincount:
-                clusters[:, d] = self.tools.bincount(labels, weights=x[:, d]) / Ncl
-
-        return labels, clusters
-
     def _astype(self, data, type):
+        return data
+    
+    def _to_device(self, data):
         return data
 
     def _update_dtype(self, x):
