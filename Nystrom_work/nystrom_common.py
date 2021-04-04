@@ -107,7 +107,7 @@ class GenericNystrom:
         basis_inds = inds[:self.n_components] 
         basis = x[basis_inds]
         # Build smaller kernel
-        basis_kernel = self._pairwise_kernels(basis, dense=False)
+        basis_kernel = self._pairwise_kernels(basis, dense=True)
         # Decomposition is an abstract method that needs to be defined in each class
         self.normalization_ = self._decomposition_and_norm(basis_kernel)
         self.components_ = basis

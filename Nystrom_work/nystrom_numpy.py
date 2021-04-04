@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.linalg import svd
 
 from pykeops.numpy import LazyTensor
 
@@ -7,7 +8,6 @@ from scipy.sparse.linalg.interface import IdentityOperator
 
 from nystrom_common import GenericNystrom
 from numpy_utils import numpytools
-
 
 
 class Nystrom_NK(GenericNystrom):
@@ -22,17 +22,14 @@ class Nystrom_NK(GenericNystrom):
                          k_means, n_iter, inv_eps, dtype, backend, verbose, random_state)
         
         self.tools = numpytools
-        
-    def _decomposition_and_norm(self, X:LazyTensor) -> np.array:
 
-        K_linear = aslinearoperator(X)
-        # K <- K + eps
-        K_linear = K_linear + IdentityOperator(K_linear.shape, dtype=self.dtype) * self.inv_eps
-        k = K_linear.shape[0] - 1
-        S, U = eigsh(K_linear, k=k, which='LM')
+
+    def _decomposition_and_norm(self, X:np.array) -> np.array:
+
+        X = X + np.eye(X.shape[0])*self.inv_eps
+        U, S, V = svd(X)
         S = np.maximum(S, 1e-12)
-
-        return np.dot(U / np.sqrt(S), U.T)
+        return np.dot(U / np.sqrt(S), V)
 
     def K_approx(self, x:np.array) -> 'LinearOperator':
         ''' Function to return Nystrom approximation to the kernel.
