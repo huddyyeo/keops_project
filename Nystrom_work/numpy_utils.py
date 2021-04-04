@@ -2,6 +2,12 @@ import numpy as np
 
 from pykeops.numpy import Genred, default_dtype, KernelSolve
 from pykeops.numpy.cluster import swap_axes as np_swap_axes
+from pykeops.numpy.cluster import grid_cluster as np_grid_cluster
+from pykeops.numpy.cluster import from_matrix as np_from_matrix
+from pykeops.numpy.cluster import cluster_ranges_centroids as np_cluster_ranges_centroids
+from pykeops.numpy.cluster import cluster_ranges as np_cluster_ranges
+from pykeops.numpy.cluster import sort_clusters as np_sort_clusters
+
 import pykeops.config
 from pykeops.numpy import LazyTensor
 
@@ -11,13 +17,19 @@ class numpytools:
     arraysum = np.sum
     exp = np.exp
     log = np.log
+    sqrt = np.sqrt
+    copy = np.copy
+    
     Genred = Genred
     KernelSolve = KernelSolve
+    LazyTensor = LazyTensor
     swap_axes = np_swap_axes
-
-    @staticmethod
-    def copy(x):
-        return np.copy(x)
+    grid_cluster = np_grid_cluster
+    from_matrix = np_from_matrix
+    cluster_ranges_centroids = np_cluster_ranges_centroids
+    cluster_ranges = np_cluster_ranges
+    sort_clusters = np_sort_clusters
+    
 
     @staticmethod
     def eq(x, y):
@@ -76,7 +88,7 @@ class numpytools:
         return np.random.randn(m, n).astype(dtype)
 
     @staticmethod
-    def zeros(shape, dtype=default_dtype):
+    def zeros(shape, dtype=default_dtype, device=None):
         return np.zeros(shape).astype(dtype)
 
     @staticmethod
@@ -91,15 +103,76 @@ class numpytools:
     def device(x):
         return "cpu"
 
-    ##### Added for Nystrom // check inconsistency with main branch utils
-    
     @staticmethod
-    def sqrt(x):
-        return np.sqrt(x)
+    def distance_function(metric):
+        def euclidean(x, y):
+            return ((x - y) ** 2).sum(-1)
+
+        def manhattan(x, y):
+            return ((x - y).abs()).sum(-1)
+
+        def angular(x, y):
+            return x | y
+
+        def hyperbolic(x, y):
+            return ((x - y) ** 2).sum(-1) / (x[0] * y[0])
+
+        if metric == "euclidean":
+            return euclidean
+        elif metric == "manhattan":
+            return manhattan
+        elif metric == "angular":
+            return angular
+        elif metric == "hyperbolic":
+            return hyperbolic
+        else:
+            raise ValueError("Unknown metric")
 
     @staticmethod
-    def bincount(x, weights=None):
-        return np.bincount(x, weights)
+    def sort(x):
+        perm = np.argsort(x)
+        return x[perm], perm
+
+    @staticmethod
+    def unsqueeze(x, n):
+        return np.expand_dims(x, n)
+
+    @staticmethod
+    def arange(n, device="cpu"):
+        return np.arange(n)
+
+    @staticmethod
+    def repeat(x, n):
+        return np.repeat(x, n)
+
+    @staticmethod
+    def to(x, device):
+        return x
+
+    @staticmethod
+    def index_select(input, dim, index):
+        return np.take(input, index, axis=dim)
+
+    @staticmethod
+    def norm(x, p=2, dim=-1):
+        return np.linalg.norm(x, ord=p, axis=dim)
+
+    @staticmethod
+    def kmeans(x, K=10, Niter=15, metric="euclidean", device="CPU"):
+
+        distance = numpytools.distance_function(metric)
+        N, D = x.shape
+        c = np.copy(x[:K, :])
+        x_i = LazyTensor(x[:, None, :])
+        for i in range(Niter):
+            c_j = LazyTensor(c[None, :, :])
+            D_ij = distance(x_i, c_j)
+            D_ij.backend = device
+            cl = D_ij.argmin(axis=1).astype(int).reshape(N)
+            Ncl = np.bincount(cl).astype(dtype="float32")
+            for d in range(D):
+                c[:, d] = np.bincount(cl, weights=x[:, d]) / Ncl
+        return cl, c
     
     @staticmethod
     def is_tensor(x):
@@ -108,8 +181,6 @@ class numpytools:
     @staticmethod
     def LazyTensor(x):
         return LazyTensor(x)
-
-
 
 def squared_distances(x, y):
     x_norm = (x ** 2).sum(1).reshape(-1, 1)
