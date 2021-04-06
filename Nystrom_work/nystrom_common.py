@@ -11,11 +11,11 @@ class GenericNystrom:
     '''Super class defining the Nystrom operations. The end user should
     use numpy.nystrom or torch.nystrom subclasses.'''
 
-    def __init__(self, n_components:int=100, kernel:str='rbf', sigma:float = None, 
-                 eps:float = 0.05, mask_radius:float = None, k_means:int = 10, 
-                 n_iter:int = 10, inv_eps:float = None, dtype = np.float32, 
-                 backend:str = None, verbose:bool = False, 
-                 random_state:Union[None,int] = None, tools = None): 
+    def __init__(self, n_components: int = 100, kernel: str = 'rbf', sigma: float = None,
+                 eps: float = 0.05, mask_radius: float = None, k_means: int = 10,
+                 n_iter: int = 10, inv_eps: float = None, dtype=np.float32,
+                 backend: str = None, verbose: bool = False,
+                 random_state: Union[None, int] = None, tools=None):
 
         ''' 
         n_components  = how many samples to select from data.
@@ -55,17 +55,18 @@ class GenericNystrom:
         else:
             self.inv_eps = 1e-8
 
-    def fit(self, x:generic_array) -> 'GenericNystrom':
+    def fit(self, x: generic_array) -> 'GenericNystrom':
         ''' 
         Args:   x = array or tensor of shape (n_samples, n_features)
         Returns: Fitted instance of the class
         '''
+        x = self._to_device(x)
 
         if self.verbose:
             print(f'Working with backend = {self.backend}')
-        
+
         # Basic checks
-        assert self.tools.is_tensor(x) , 'Input to fit(.) must be an array\
+        assert self.tools.is_tensor(x), 'Input to fit(.) must be an array\
         if using numpy and tensor if using torch.'
         assert x.shape[0] >= self.n_components, 'The application needs\
         X.shape[0] >= n_components.'
@@ -73,18 +74,18 @@ class GenericNystrom:
             assert self.sigma > 0, 'Should be working with decaying exponential.'
 
         # Set default sigma
-        #if self.sigma is None and self.kernel == 'rbf':
+        # if self.sigma is None and self.kernel == 'rbf':
         if self.sigma is None:
             self.sigma = np.sqrt(x.shape[1])
 
         if self.mask_radius is None:
             if self.kernel == 'rbf':
-                self.mask_radius = 2* np.sqrt(2) * self.sigma
+                self.mask_radius = 2 * np.sqrt(2) * self.sigma
             elif self.kernel == 'exp':
                 self.mask_radius = 8 * self.sigma
-            
+
             else:
-                self.mask_radius = 4*self.sigma
+                self.mask_radius = 4 * self.sigma
 
         # Update dtype
         self._update_dtype(x)
@@ -92,8 +93,8 @@ class GenericNystrom:
         n_samples = x.shape[0]
         # Define basis
         rnd = self._check_random_state(self.random_state)
-        inds = rnd.permutation(n_samples) 
-        basis_inds = inds[:self.n_components] 
+        inds = rnd.permutation(n_samples)
+        basis_inds = inds[:self.n_components]
         basis = x[basis_inds]
         # Build smaller kernel
         basis_kernel = self._pairwise_kernels(basis, dense=True)
@@ -104,31 +105,32 @@ class GenericNystrom:
 
         return self
 
-    def _decomposition_and_norm(self, X:GenericLazyTensor):
+    def _decomposition_and_norm(self, X: GenericLazyTensor):
         """
         To be defined in the subclass
         """
         print('_decomposition_and_norm needs to be implemented in the subclass')
 
     def transform(self, x):
-        ''' 
+        '''
         Applies transform on the data.
-        
+
         Args:
             X [np.array or torch.tensor] = data to transform
         Returns
             X [np.array or torch.tensor] = data after transformation
         '''
-
-        K_nq = self._pairwise_kernels(x, self.components_, dense=True)
-        x_new = K_nq @ self.tools.transpose(self.normalization_)
+        x = self._to_device(x)
+        K_nq = self._pairwise_kernels(x, self.components_, dense=False)
+        norm = self.tools.contiguous(self._to_device(self.tools.transpose(self.normalization_)))
+        x_new = K_nq @ norm
         return x_new
 
-    def _pairwise_kernels(self, x, y = None, dense = False):
+    def _pairwise_kernels(self, x, y=None, dense=False):
         '''Helper function to build kernel
-        
+
         Args:   x[np.array or torch.tensor] = data
-                y[np.array or torch.tensor] = array/tensor 
+                y[np.array or torch.tensor] = array/tensor
                 dense[bool] = False to work with lazy tensor reduction,
                               True to work with dense arrays/tensors
         Returns:
@@ -139,72 +141,66 @@ class GenericNystrom:
         if y is None:
             y = x
 
-        if self.kernel == 'rbf':
-            x = x / self.sigma
-            y = y / self.sigma
+        x = x / self.sigma
+        y = y / self.sigma
 
+        x_i, x_j = self.tools.contiguous(self._to_device(x[:, None, :])), self.tools.contiguous(
+            self._to_device(y[None, :, :]))
+
+        if self.kernel == 'rbf':
             if dense:
-                x_i, x_j = x[:, None, :], y[None, :, :]
-                D_ij = ( (x_i - x_j)**2 ).sum(axis=2)
-                K_ij = self.tools.exp(-D_ij )
+                D_ij = ((x_i - x_j) ** 2).sum(axis=2)
+                K_ij = self.tools.exp(-D_ij)
 
             else:
-                x_i, x_j = self.tools.LazyTensor(x[:, None, :]), self.tools.LazyTensor(y[None, :, :])
-                D_ij = ( (x_i - x_j)**2 ).sum(dim=2)
+                x_i, x_j = self.tools.LazyTensor(x_i), self.tools.LazyTensor(x_j)
+                D_ij = ((x_i - x_j) ** 2).sum(dim=2)
                 K_ij = (-D_ij).exp()
-                
+
                 # block-sparse reduction preprocess
                 K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
-
         elif self.kernel == 'exp':
-            x = x / self.sigma
-            y = y / self.sigma
-
             if dense:
-                x_i, x_j = x[:, None, :], y[None, :, :]
-                K_ij =  self.tools.exp(-self.tools.sqrt( ( ((x_i - x_j) ** 2).sum(axis=2) )))
+                K_ij = self.tools.exp(-self.tools.sqrt((((x_i - x_j) ** 2).sum(axis=2))))
 
             else:
-                x_i, x_j = self.tools.LazyTensor(x[:, None, :]), self.tools.LazyTensor(y[None, :, :])
+                x_i, x_j = self.tools.LazyTensor(x_i), self.tools.LazyTensor(x_j)
                 K_ij = (-(((x_i - x_j) ** 2).sum(-1)).sqrt()).exp()
 
                 # block-sparse reduction preprocess
                 K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
-        
+
         # computation with custom kernel
         else:
-            x = x / self.sigma
-            y = y / self.sigma
-        
             if dense:
-                x_i, x_j = x[:, None, :], y[None, :, :]
-                K_ij =  self.kernel[0](x_i, x_j)
+                K_ij = self.kernel[0](x_i, x_j)
             else:
-                x_i, x_j = self.tools.LazyTensor(x[:, None, :]), self.tools.LazyTensor(y[None, :, :])
+                x_i, x_j = self.tools.LazyTensor(x_i), self.tools.LazyTensor(x_j)
                 K_ij = self.kernel[1](x_i, x_j)
-            
+
                 # TODO: add in block-sparse reduction preprocess for custom !!
 
-        if not dense:
-            K_ij.backend = self.backend
-        
+        if not dense and self.backend == 'cuda':
+            K_ij.backend = 'GPU'
+
         return K_ij
 
-    def _Gauss_block_sparse_pre(self, x:generic_array, y:generic_array, 
-                                K_ij:GenericLazyTensor):
-        ''' 
+    def _Gauss_block_sparse_pre(self, x: generic_array, y: generic_array,
+                                K_ij: GenericLazyTensor):
+        '''
         Helper function to preprocess data for block-sparse reduction
         of the Gaussian kernel
-    
-        Args: 
+
+        Args:
             x, y =  arrays or tensors giving rise to Gaussian kernel K(x,y)
             K_ij = symbolic representation of K(x,y)
             eps[float] = size for square bins
         Returns:
-            K_ij =  symbolic representation of K(x,y) with 
+            K_ij =  symbolic representation of K(x,y) with
                                 set sparse ranges
         '''
-
+        x = self._to_device(x)
+        y = self._to_device(y)
         # labels for low dimensions
         if x.shape[1] < 4 or y.shape[1] < 4:
             x_labels = self.tools.grid_cluster(x, self.eps)
@@ -215,7 +211,7 @@ class GenericNystrom:
             y_ranges, y_centroids, _ = self.tools.cluster_ranges_centroids(y, y_labels)
 
         else:
-        # labels for higher dimensions
+            # labels for higher dimensions
             x_labels, x_centroids = self.tools.kmeans(x)
             y_labels, y_centroids = self.tools.kmeans(y)
             # compute ranges
@@ -242,14 +238,14 @@ class GenericNystrom:
 
     def _astype(self, data, type):
         return data
-    
+
     def _to_device(self, data):
         return data
 
     def _update_dtype(self, x):
-        ''' Helper function that sets dtype to that of 
+        ''' Helper function that sets dtype to that of
             the given data in the fitting step.
-            
+
         Args:
             x [np.array or torch.tensor] = raw data to remap
         Returns:
@@ -258,10 +254,10 @@ class GenericNystrom:
         self.dtype = x.dtype
         self.inv_eps = np.array([self.inv_eps]).astype(self.dtype)[0]
 
-    def _check_random_state(self, seed:Union[None,int]) -> None:
+    def _check_random_state(self, seed: Union[None, int]) -> None:
         '''Set/get np.random.RandomState instance for permutation
         Args
-            seed[None, int] 
+            seed[None, int]
         Returns:
             numpy random state
         '''
@@ -271,5 +267,5 @@ class GenericNystrom:
 
         elif type(seed) == int:
             return np.random.RandomState(seed)
-            
+
         raise ValueError(f'Seed {seed} must be None or an integer.')
