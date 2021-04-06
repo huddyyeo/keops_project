@@ -122,8 +122,7 @@ class GenericNystrom:
         '''
         x = self._to_device(x)
         K_nq = self._pairwise_kernels(x, self.components_, dense=False)
-        norm = self.tools.contiguous(self._to_device(self.tools.transpose(self.normalization_)))
-        x_new = K_nq @ norm
+        x_new = K_nq @ self.normalization_
         return x_new
 
     def _pairwise_kernels(self, x, y=None, dense=False):
