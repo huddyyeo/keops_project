@@ -36,7 +36,7 @@ class Nystrom(GenericNystrom):
         Returns
             K = Nystrom approximation to kernel'''
     
-        K_nq = self._pairwise_kernels(x, self.components_)
+        K_nq = self._pairwise_kernels(x, self.components_, dense=True)
         K_q_inv = self.normalization_.T @ self.normalization_
         K_approx = K_nq @ K_q_inv @ K_nq.T
         return aslinearoperator(K_approx) 
