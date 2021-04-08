@@ -5,6 +5,7 @@ from scipy.sparse.linalg import aslinearoperator
 
 from nystrom_common import GenericNystrom
 from numpy_utils import numpytools
+from pykeops.numpy import LazyTensor
 
 class Nystrom(GenericNystrom):
     '''Nystrom class to work with Numpy arrays'''
@@ -19,6 +20,7 @@ class Nystrom(GenericNystrom):
         
         self.tools = numpytools
         self.backend = 'CPU'
+        self.LazyTensor = LazyTensor
     
     def _decomposition_and_norm(self, X:np.array) -> np.array:
 

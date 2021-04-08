@@ -2,10 +2,11 @@ import torch
 
 from pykeops.torch import Genred, KernelSolve, default_dtype
 from pykeops.torch.cluster import swap_axes as torch_swap_axes
-from pykeops.torch import LazyTensor
 from pykeops.torch.cluster import grid_cluster as torch_grid_cluster
 from pykeops.torch.cluster import from_matrix as torch_from_matrix
-from pykeops.torch.cluster import cluster_ranges_centroids as torch_cluster_ranges_centroids
+from pykeops.torch.cluster import (
+    cluster_ranges_centroids as torch_cluster_ranges_centroids,
+)
 from pykeops.torch.cluster import cluster_ranges as torch_cluster_ranges
 from pykeops.torch.cluster import sort_clusters as torch_sort_clusters
 
@@ -23,15 +24,18 @@ class torchtools:
     norm = torch.norm
     sqrt = torch.sqrt
 
+    swap_axes = torch_swap_axes
+
     Genred = Genred
     KernelSolve = KernelSolve
-    LazyTensor = LazyTensor
-    swap_axes = torch_swap_axes
     grid_cluster = torch_grid_cluster
     from_matrix = torch_from_matrix
     cluster_ranges_centroids = torch_cluster_ranges_centroids
     cluster_ranges = torch_cluster_ranges
     sort_clusters = torch_sort_clusters
+
+    arraytype = torch.Tensor
+    float_types = [float]
 
     # GenredLowlevel = GenredLowlevel
 
@@ -149,6 +153,9 @@ class torchtools:
         def angular(x, y):
             return x | y
 
+        def angular_full(x, y):
+            return angular(x, y) / ((angular(x, x) * angular(y, y)).sqrt())
+
         def hyperbolic(x, y):
             return ((x - y) ** 2).sum(-1) / (x[0] * y[0])
 
@@ -158,6 +165,8 @@ class torchtools:
             return manhattan
         elif metric == "angular":
             return angular
+        elif metric == "angular_full":
+            return angular_full
         elif metric == "hyperbolic":
             return hyperbolic
         else:
@@ -190,32 +199,73 @@ class torchtools:
         return torch.index_select(input, dim, index)
 
     @staticmethod
-    def norm(x, p=2, dim=-1):
-        return torch.norm(x, p=p, dim=dim)
+    def kmeans(x, distance=None, K=10, Niter=15, device="cuda", approx=False, n=10):
 
-    @staticmethod
-    def kmeans(x, K=10, Niter=15, metric="euclidean", device="cuda"):
+        from pykeops.torch import LazyTensor
 
-        distance = torchtools.distance_function(metric)
+        if distance is None:
+            distance = torchtools.distance_function("euclidean")
+
+        def calc_centroid(x, c, cl, n=10):
+            "Helper function to optimise centroid location"
+            c = torch.clone(c.detach()).to(device)
+            c.requires_grad = True
+            x1 = LazyTensor(x.unsqueeze(0))
+            op = torch.optim.Adam([c], lr=1 / n)
+            scaling = 1 / torch.gather(torch.bincount(cl), 0, cl).view(-1, 1)
+            scaling.requires_grad = False
+            with torch.autograd.set_detect_anomaly(True):
+                for _ in range(n):
+                    c.requires_grad = True
+                    op.zero_grad()
+                    c1 = LazyTensor(torch.index_select(c, 0, cl).unsqueeze(0))
+                    d = distance(x1, c1)
+                    loss = (
+                        d.sum(0) * scaling
+                    ).sum()  # calculate distance to centroid for each datapoint, divide by total number of points in that cluster, and sum
+                    loss.backward(retain_graph=False)
+                    op.step()
+                    if normalise:
+                        with torch.no_grad():
+                            c = c / torch.norm(c, dim=-1).repeat_interleave(
+                                c.shape[1]
+                            ).reshape(
+                                -1, c.shape[1]
+                            )  # normalising centroids to have norm 1
+            return c.detach()
+
         N, D = x.shape
         c = x[:K, :].clone()
         x_i = LazyTensor(x.view(N, 1, D).to(device))
+
         for i in range(Niter):
             c_j = LazyTensor(c.view(1, K, D).to(device))
             D_ij = distance(x_i, c_j)
             cl = D_ij.argmin(dim=1).long().view(-1)
-            c.zero_()
-            c.scatter_add_(0, cl[:, None].repeat(1, D), x)
-            Ncl = torch.bincount(cl, minlength=K).type_as(c).view(K, 1)
-            c /= Ncl
-            if torch.any(torch.isnan(c)) and metric == "angular":
-                raise ValueError("Please normalise inputs")
+
+            # updating c: either with approximation or exact
+            if approx:
+                # approximate with GD optimisation
+                c = calc_centroid(x, c, cl, n)
+
+            else:
+                # exact from average
+                c.zero_()
+                c.scatter_add_(0, cl[:, None].repeat(1, D), x)
+                Ncl = torch.bincount(cl, minlength=K).type_as(c).view(K, 1)
+                c /= Ncl
+
+            if torch.any(torch.isnan(c)):
+                raise ValueError(
+                    "NaN detected in centroids during KMeans, please check metric is correct"
+                )
         return cl, c
 
     @staticmethod
     def is_tensor(x):
         return isinstance(x, torch.Tensor)
-    
+
+
 def squared_distances(x, y):
     x_norm = (x ** 2).sum(1).reshape(-1, 1)
     y_norm = (y ** 2).sum(1).reshape(1, -1)
