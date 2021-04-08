@@ -480,14 +480,14 @@ def full_benchmark(
     
     # plt.tight_layout()
 
-    # Save as a .csv to put a nice Tikz figure in the papers:
-    header = "Npoints, " + ", ".join(labels)
-    os.makedirs("output", exist_ok=True)
-    np.savetxt(
-        f"output/{to_plot}.csv",
-        benches,
-        fmt="%-9.5f",
-        header=header,
-        comments="",
-        delimiter=",",
-    )
+    # # Save as a .csv to put a nice Tikz figure in the papers:
+    # header = "Npoints, " + ", ".join(labels)
+    # os.makedirs("output", exist_ok=True)
+    # np.savetxt(
+    #     f"output/{to_plot}.csv",
+    #     benches,
+    #     fmt="%-9.5f",
+    #     header=header,
+    #     comments="",
+    #     delimiter=",",
+    # )
