@@ -85,9 +85,6 @@ class GenericNystrom:
             elif self.kernel == 'exp':
                 self.mask_radius = 8 * self.sigma
 
-            else:
-                self.mask_radius = 4 * self.sigma
-
         # Update dtype
         self._update_dtype(x)
         # Number of samples
