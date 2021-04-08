@@ -24,7 +24,13 @@ class Nystrom(GenericNystrom):
     def _to_device(self, x):
         return x.to(self.backend)
         
-    def _decomposition_and_norm(self, basis_kernel):
+    def _decomposition_and_norm(self, basis_kernel: LazyTensor) -> torch.tensor:
+        '''Function to return self.nomalization_ used in fit(.) function
+        Args:
+            basis_kernel[LazyTensor] = subset of input data
+        Returns:
+            X_q[torch.tensor] is the q x D-dimensional sub matrix of matrix X
+        '''
         id = torch.diag(torch.ones(basis_kernel.shape[1], dtype=self.dtype)).to(self.backend)
         basis_kernel = basis_kernel.to(self.backend) @ id
         U, S, V = torch.linalg.svd(basis_kernel, full_matrices = False)
