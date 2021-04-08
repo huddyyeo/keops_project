@@ -15,8 +15,8 @@ class Nystrom(GenericNystrom):
 
         self.tools = torchtools
 
-        self.backend = 'cuda'
-        self.verbose = None
+        self.backend = backend
+        self.verbose = verbose
 
     def _update_dtype(self, x):
         pass
