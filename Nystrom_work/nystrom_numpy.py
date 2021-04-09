@@ -43,17 +43,5 @@ class Nystrom(GenericNystrom):
         K_approx = K_nq @ K_q_inv @ K_nq.T
         return aslinearoperator(K_approx) 
 
-    def transform(self, x:np.array) -> np.array:
-        '''
-        Applies transform on the data.
-        Args:
-            x  = data to transform
-        Returns
-            x_new  = data in approximated feature space
-        '''
-        K_nq = self._pairwise_kernels(x, self.components_, dense=True)
-        x_new = K_nq @ self.normalization_
-        return x_new
-
     def _astype(self, data, d_type):
         return data.astype(d_type)
