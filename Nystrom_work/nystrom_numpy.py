@@ -30,11 +30,11 @@ class Nystrom(GenericNystrom):
         
         return np.dot(U / np.sqrt(S), V)
 
-    def K_approx(self, x:np.array):
+    def K_approx(self, x:np.array) -> 'LinearOperator':
         ''' Function to return Nystrom approximation to the kernel.
         
         Args:
-            X = data used in fit(.) function.
+            x = data used in fit(.) function.
         Returns
             K = Nystrom approximation to kernel'''
     
@@ -42,6 +42,18 @@ class Nystrom(GenericNystrom):
         K_q_inv = self.normalization_.T @ self.normalization_
         K_approx = K_nq @ K_q_inv @ K_nq.T
         return aslinearoperator(K_approx) 
+
+    def transform(self, x:np.array) -> np.array:
+        '''
+        Applies transform on the data.
+        Args:
+            x  = data to transform
+        Returns
+            x_new  = data in approximated feature space
+        '''
+        K_nq = self._pairwise_kernels(x, self.components_, dense=True)
+        x_new = K_nq @ self.normalization_
+        return x_new
 
     def _astype(self, data, d_type):
         return data.astype(d_type)
