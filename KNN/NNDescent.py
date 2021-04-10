@@ -8,6 +8,7 @@ class NNDescent:
         num_trees=5,
         leaf_multiplier=1,
         big_leaf_depth=5,
+        verbose=False,
     ):
         """Initialize the NNDescent class.
 
@@ -37,7 +38,7 @@ class NNDescent:
 
         # If data is provided, we call the fit function.
         if data is not None:
-            self.fit(data)
+            self.fit(data, verbose=verbose)
 
     def distance(self, x, y):
         # Square of euclidian distance. Skip the root for faster computation.
@@ -46,7 +47,7 @@ class NNDescent:
         elif self.metric == "manhattan":
             return ((x - y).abs()).sum(-1)
 
-    def fit(self, X, iter=20):
+    def fit(self, X, iter=20, verbose=False):
         """Fits the NNDescent search graph to the data set X.
 
         Args:
@@ -77,9 +78,9 @@ class NNDescent:
 
         # Update the graph
         self._calculate_all_distances()
-        self._update_graph(iter=iter)
+        self._update_graph(iter=iter, verbose=verbose)
 
-    def _update_graph(self, iter=25):
+    def _update_graph(self, iter=25, verbose=False):
         """Updates the graph using algorithm: https://pynndescent.readthedocs.io/en/latest/how_pynndescent_works.html
 
         Args:
@@ -88,15 +89,16 @@ class NNDescent:
         # [STEP 1: Start with random graph.] Iterate
         start = time.time()
         for it in range(iter):
-            print(
-                "Iteration number",
-                it,
-                "with average distance of",
-                torch.mean(self.k_distances).item(),
-                "Took",
-                time.time() - start,
-                "seconds.",
-            )
+            if verbose:
+                print(
+                    "Iteration number",
+                    it,
+                    "with average distance of",
+                    torch.mean(self.k_distances).item(),
+                    "Took",
+                    time.time() - start,
+                    "seconds.",
+                )
             has_changed = False
 
             # [STEP 2: For each node:] (TODO: Investigate whether this can be vectorized.)
@@ -136,10 +138,11 @@ class NNDescent:
 
             # [STEP 5: If any changes were made, repeat iteration, otherwise stop]
             if not has_changed:
-                print("Fitting complete! Took", it, "iterations.")
+                if verbose:
+                    print("Fitting complete! Took", it, "iterations.")
                 break
 
-    def kneighbors(self, X, max_num_steps=100, tree_init=True):
+    def kneighbors(self, X, max_num_steps=100, tree_init=True, verbose=False):
         """Returns k nearest neighbors of input X using NNDescent.
 
         Our code is largely based on this algorithm:
@@ -185,15 +188,16 @@ class NNDescent:
         # The initialization of candidates and explored set is done. Now we can search.
         count = 0
         while count < max_num_steps:
-            print(
-                "Step",
-                count,
-                "- Search is completed for",
-                1 - torch.mean(1.0 * is_active).item(),
-                "- this step took",
-                time.time() - start,
-                "s",
-            )
+            if verbose:
+                print(
+                    "Step",
+                    count,
+                    "- Search is completed for",
+                    1 - torch.mean(1.0 * is_active).item(),
+                    "- this step took",
+                    time.time() - start,
+                    "s",
+                )
             start = time.time()
 
             # [2. Look at nodes connected by an edge to the best untried node in graph]
@@ -254,12 +258,13 @@ class NNDescent:
             count += 1
 
         # Return the k candidates
-        print(
-            "Graph search finished after",
-            count,
-            "steps. Finished for:",
-            1 - torch.mean(1.0 * is_active).item(),
-        )
+        if verbose:
+            print(
+                "Graph search finished after",
+                count,
+                "steps. Finished for:",
+                1 - torch.mean(1.0 * is_active).item(),
+            )
         return candidate_idx[:, :-1]
 
     def _calculate_all_distances(self):
