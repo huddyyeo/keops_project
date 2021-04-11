@@ -44,5 +44,5 @@ class Nystrom(GenericNystrom):
             K[torch.tensor] = Nystrom approximation to kernel'''
 
         K_nq = self._pairwise_kernels(X, self.components_, dense=True)
-        K_approx = K_nq @ self.normalization_ @ K_nq.T
+        K_approx = K_nq @ self.normalization_ @ self.normalization_.T @ K_nq.T
         return K_approx
