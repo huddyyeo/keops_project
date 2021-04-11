@@ -13,24 +13,24 @@ class GenericNystrom:
 
     def __init__(self, n_components: int = 100, kernel: Union[str, callable] = 'rbf', sigma: float = None,
                  eps: float = 0.05, mask_radius: float = None, k_means: int = 10,
-                 n_iter: int = 10, inv_eps: float = None, dtype=np.float32,
-                 backend: str = None, verbose: bool = False,
+                 n_iter: int = 10, inv_eps: float = None,
+                 verbose: bool = False,
                  random_state: Union[None, int] = None, tools=None):
 
-        ''' 
+        '''
         n_components  = how many samples to select from data.
-        kernel  = type of kernel to use. Current options = {rbf:Gaussian, 
+        kernel  = type of kernel to use. Current options = {rbf:Gaussian,
                                                                  exp: exponential}.
         sigma  = exponential constant for the RBF and exponential kernels.
         eps = size for square bins in block-sparse preprocessing.
-        k_means = number of centroids for KMeans algorithm in block-sparse 
+        k_means = number of centroids for KMeans algorithm in block-sparse
                        preprocessing.
         n_iter = number of iterations for KMeans.
         dtype = type of data: np.float32 or np.float64
         inv_eps = additive invertibility constant for matrix decomposition.
         backend = "GPU" or "CPU" mode for LazyTensors.
         verbose = set True to print details.
-        random_state = to set a random seed for the random sampling of the samples. 
+        random_state = to set a random seed for the random sampling of the samples.
                         To be used when  reproducibility is needed.
         '''
         self.n_components = n_components
@@ -40,16 +40,13 @@ class GenericNystrom:
         self.mask_radius = mask_radius
         self.k_means = k_means
         self.n_iter = n_iter
-        self.dtype = dtype
+        self.dtype = None
         self.verbose = verbose
         self.random_state = random_state
         self.tools = None
         self.LazyTensor = None
 
-        if not backend:
-            self.backend = 'cuda' if pykeops.config.gpu_available else 'CPU'
-        else:
-            self.backend = backend
+        self.backend = 'cuda' if pykeops.config.gpu_available else 'CPU'
 
         if inv_eps:
             self.inv_eps = inv_eps
@@ -57,11 +54,12 @@ class GenericNystrom:
             self.inv_eps = 1e-8
 
     def fit(self, x: generic_array) -> 'GenericNystrom':
-        ''' 
+        '''
         Args:   x = array or tensor of shape (n_samples, n_features)
         Returns: Fitted instance of the class
         '''
         x = self._to_device(x)
+        self.dtype = x.dtype
 
         if self.verbose:
             print(f'Working with backend = {self.backend}')
@@ -112,7 +110,6 @@ class GenericNystrom:
     def transform(self, x):
         '''
         Applies transform on the data.
-
         Args:
             X [np.array or torch.tensor] = data to transform
         Returns
@@ -125,7 +122,6 @@ class GenericNystrom:
 
     def _pairwise_kernels(self, x, y=None, dense=False):
         '''Helper function to build kernel
-
         Args:   x[np.array or torch.tensor] = data
                 y[np.array or torch.tensor] = array/tensor
                 dense[bool] = False to work with lazy tensor reduction,
@@ -137,7 +133,6 @@ class GenericNystrom:
 
         if y is None:
             y = x
-
         x = x / self.sigma
         y = y / self.sigma
 
@@ -175,7 +170,6 @@ class GenericNystrom:
 
         if not dense and self.backend == 'cuda':
             K_ij.backend = 'GPU'
-
         return K_ij
 
     def _Gauss_block_sparse_pre(self, x: generic_array, y: generic_array,
@@ -183,7 +177,6 @@ class GenericNystrom:
         '''
         Helper function to preprocess data for block-sparse reduction
         of the Gaussian kernel
-
         Args:
             x, y =  arrays or tensors giving rise to Gaussian kernel K(x,y)
             K_ij = symbolic representation of K(x,y)
@@ -238,7 +231,6 @@ class GenericNystrom:
     def _update_dtype(self, x):
         ''' Helper function that sets dtype to that of
             the given data in the fitting step.
-
         Args:
             x [np.array or torch.tensor] = raw data to remap
         Returns:
