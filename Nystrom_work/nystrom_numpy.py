@@ -5,6 +5,7 @@ from scipy.sparse.linalg import aslinearoperator
 
 from nystrom_common import GenericNystrom
 from numpy_utils import numpytools
+from pykeops.numpy import LazyTensor
 
 class Nystrom(GenericNystrom):
     '''Nystrom class to work with Numpy arrays'''
@@ -19,6 +20,7 @@ class Nystrom(GenericNystrom):
         
         self.tools = numpytools
         self.backend = 'CPU'
+        self.LazyTensor = LazyTensor
     
     def _decomposition_and_norm(self, X:np.array) -> np.array:
 
@@ -28,18 +30,23 @@ class Nystrom(GenericNystrom):
         
         return np.dot(U / np.sqrt(S), V)
 
-    def K_approx(self, x:np.array):
+    def K_approx(self, x:np.array) -> 'LinearOperator':
         ''' Function to return Nystrom approximation to the kernel.
         
         Args:
-            X = data used in fit(.) function.
+            x = data used in fit(.) function.
         Returns
             K = Nystrom approximation to kernel'''
     
-        K_nq = self._pairwise_kernels(x, self.components_, dense=True)
-        K_q_inv = self.normalization_.T @ self.normalization_
+        K_nq = aslinearoperator(
+            self._pairwise_kernels(x, self.components_, dense=False)
+            )
+        
+        K_q_inv = (aslinearoperator(self.normalization_).T @ 
+                    aslinearoperator(self.normalization_) 
+                )
         K_approx = K_nq @ K_q_inv @ K_nq.T
-        return aslinearoperator(K_approx) 
+        return K_approx 
 
     def _astype(self, data, d_type):
         return data.astype(d_type)

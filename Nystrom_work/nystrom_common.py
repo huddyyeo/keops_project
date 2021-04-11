@@ -11,7 +11,7 @@ class GenericNystrom:
     '''Super class defining the Nystrom operations. The end user should
     use numpy.nystrom or torch.nystrom subclasses.'''
 
-    def __init__(self, n_components: int = 100, kernel: str = 'rbf', sigma: float = None,
+    def __init__(self, n_components: int = 100, kernel: Union[str, callable] = 'rbf', sigma: float = None,
                  eps: float = 0.05, mask_radius: float = None, k_means: int = 10,
                  n_iter: int = 10, inv_eps: float = None, dtype=np.float32,
                  backend: str = None, verbose: bool = False,
@@ -44,6 +44,7 @@ class GenericNystrom:
         self.verbose = verbose
         self.random_state = random_state
         self.tools = None
+        self.LazyTensor = None
 
         if not backend:
             self.backend = 'cuda' if pykeops.config.gpu_available else 'CPU'
@@ -83,9 +84,6 @@ class GenericNystrom:
                 self.mask_radius = 2 * np.sqrt(2) * self.sigma
             elif self.kernel == 'exp':
                 self.mask_radius = 8 * self.sigma
-
-            else:
-                self.mask_radius = 4 * self.sigma
 
         # Update dtype
         self._update_dtype(x)
@@ -152,7 +150,7 @@ class GenericNystrom:
                 K_ij = self.tools.exp(-D_ij)
 
             else:
-                x_i, x_j = self.tools.LazyTensor(x_i), self.tools.LazyTensor(x_j)
+                x_i, x_j = self.LazyTensor(x_i), self.LazyTensor(x_j)
                 D_ij = ((x_i - x_j) ** 2).sum(dim=2)
                 K_ij = (-D_ij).exp()
 
@@ -163,7 +161,7 @@ class GenericNystrom:
                 K_ij = self.tools.exp(-self.tools.sqrt((((x_i - x_j) ** 2).sum(axis=2))))
 
             else:
-                x_i, x_j = self.tools.LazyTensor(x_i), self.tools.LazyTensor(x_j)
+                x_i, x_j = self.LazyTensor(x_i), self.LazyTensor(x_j)
                 K_ij = (-(((x_i - x_j) ** 2).sum(-1)).sqrt()).exp()
 
                 # block-sparse reduction preprocess
@@ -171,13 +169,9 @@ class GenericNystrom:
 
         # computation with custom kernel
         else:
-            if dense:
-                K_ij = self.kernel[0](x_i, x_j)
-            else:
-                x_i, x_j = self.tools.LazyTensor(x_i), self.tools.LazyTensor(x_j)
-                K_ij = self.kernel[1](x_i, x_j)
+            print('Please note that computations on custom kernels are dense-only.')
+            K_ij = self.kernel(x_i, x_j)
 
-                # TODO: add in block-sparse reduction preprocess for custom !!
 
         if not dense and self.backend == 'cuda':
             K_ij.backend = 'GPU'

@@ -2,6 +2,7 @@ import torch
 
 from nystrom_common import GenericNystrom
 from torch_utils import torchtools
+from pykeops.torch import LazyTensor
 
 
 class Nystrom(GenericNystrom):
@@ -10,10 +11,12 @@ class Nystrom(GenericNystrom):
                  eps: float = 0.05, mask_radius: float = None, k_means=10,
                  n_iter: int = 10, inv_eps: float = None, dtype=torch.float32,
                  backend=None, verbose=False, random_state=None, tools=None):
+        
         super().__init__(n_components, kernel, sigma, eps, mask_radius, k_means,
                          n_iter, inv_eps, dtype, backend, verbose, random_state)
 
         self.tools = torchtools
+        self.LazyTensor = LazyTensor
 
         self.backend = backend
         self.verbose = verbose
