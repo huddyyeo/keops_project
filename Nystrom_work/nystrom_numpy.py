@@ -12,11 +12,11 @@ class Nystrom(GenericNystrom):
 
     def __init__(self, n_components=100, kernel='rbf', sigma:float = None,
                  eps:float = 0.05, mask_radius:float = None, k_means = 10, 
-                 n_iter:int = 10, inv_eps:float = None, dtype = np.float32, 
-                 backend = None, verbose = False, random_state=None, tools = None):
+                 n_iter:int = 10, inv_eps:float = None,
+                  verbose = False, random_state=None, tools = None):
 
         super().__init__(n_components, kernel, sigma, eps, mask_radius,
-                         k_means, n_iter, inv_eps, dtype, backend, verbose, random_state)
+                         k_means, n_iter, inv_eps, verbose, random_state)
         
         self.tools = numpytools
         self.backend = 'CPU'
