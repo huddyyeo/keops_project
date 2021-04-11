@@ -38,7 +38,7 @@ class Nystrom(GenericNystrom):
         basis_kernel = basis_kernel.to(self.backend) @ id
         U, S, V = torch.linalg.svd(basis_kernel, full_matrices = False)
         S = torch.maximum(S, torch.ones(S.size()).to(self.backend) * 1e-12)
-        return torch.mm(U / torch.sqrt(S), V.t())
+        return torch.mm(U / torch.sqrt(S), V)
 
     def K_approx(self, X: torch.tensor) -> torch.tensor:
         ''' Function to return Nystrom approximation to the kernel.
