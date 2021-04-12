@@ -57,7 +57,6 @@ class K_approx_operator():
         self.normalization = normalization
 
     def __matmul__(self, x:torch.tensor) -> torch.tensor:
-        print(self.K_nq.dtype)
         x = self.K_nq.T @ x 
         x = self.normalization @ self.normalization.T @ x
         x = self.K_nq @ x
