@@ -1,7 +1,7 @@
 import torch
 
-from nystrom_common import GenericNystrom
-from torch_utils import torchtools
+from nystrom_common import GenericNystrom 
+from torch_utils import torchtools 
 from pykeops.torch import LazyTensor
 
 
@@ -44,5 +44,21 @@ class Nystrom(GenericNystrom):
             K[torch.tensor] = Nystrom approximation to kernel'''
 
         K_nq = self._pairwise_kernels(X, self.components_, dense=True)
-        K_approx = K_nq @ self.normalization_ @ self.normalization_.T @ K_nq.T
+        K_approx = K_approx_operator(K_nq, self.normalization_)
         return K_approx
+
+class K_approx_operator():
+    ''' Helper class to return K_approx as an object 
+    compatible with @ symbol'''
+
+    def __init__(self, K_nq, normalization):
+
+        self.K_nq = K_nq
+        self.normalization = normalization
+
+    def __matmul__(self, x:torch.tensor) -> torch.tensor:
+        print(self.K_nq.dtype)
+        x = self.K_nq.T @ x 
+        x = self.normalization @ self.normalization.T @ x
+        x = self.K_nq @ x
+        return x 
