@@ -215,7 +215,7 @@ class GenericNystrom:
         elif self.kernel == 'exp':
             D = self.tools.sqrt(self.tools.arraysum((x_centroids[:, None, :] - y_centroids[None, :, :]) ** 2, 2))
 
-        keep = D < (self.mask_radius) ** 2
+        keep = D # < (self.mask_radius) ** 2
         # mask -> set of integer tensors
         ranges_ij = self.tools.from_matrix(x_ranges, y_ranges, keep)
         K_ij.ranges = ranges_ij  # block-sparsity pattern
