@@ -268,8 +268,8 @@ def train_test_loop(N, loops, routine, max_time, args, kwargs):
     print(f"test  = {B:3}x{loops:3}x {si_format(test_perf):>7}s, ", end="")
     print(f"recall = {100*perf:>3.0f}%")
 
-    # if perf < 0.75:
-    #     raise ValueError("** Recall lower than 75%!")
+    if perf < 0.75:
+        raise ValueError("** Recall lower than 75%!")
 
     return test_perf
 
@@ -433,32 +433,32 @@ def full_benchmark(
         for (j, val) in enumerate(benches[:, i + 1]):
             if np.isnan(val) and j > 0:
                 x, y = benches[j - 1, 0], transform(benches[j - 1, i + 1])
-                plt.annotate(
-                    "Memory overflow!",
-                    xy=(1.05 * x, y),
-                    horizontalalignment="left",
-                    verticalalignment="center",
-                )
+                # plt.annotate(
+                #     "Memory overflow!",
+                #     xy=(1.05 * x, y),
+                #     horizontalalignment="left",
+                #     verticalalignment="center",
+                # )
                 break
 
             elif np.isposinf(val) and j > 0:
                 x, y = benches[j - 1, 0], transform(benches[j - 1, i + 1])
-                plt.annotate(
-                    "Too slow!",
-                    xy=(1.05 * x, y),
-                    horizontalalignment="left",
-                    verticalalignment="center",
-                )
+                # plt.annotate(
+                #     "Too slow!",
+                #     xy=(1.05 * x, y),
+                #     horizontalalignment="left",
+                #     verticalalignment="center",
+                # )
                 break
 
             elif np.isneginf(val) and j > 0:
                 x, y = benches[j - 1, 0], transform(benches[j - 1, i + 1])
-                plt.annotate(
-                    "Recall < 75%",
-                    xy=(1.05 * x, y),
-                    horizontalalignment="left",
-                    verticalalignment="center",
-                )
+                # plt.annotate(
+                #     "Recall < 75%",
+                #     xy=(1.1 * x, y),
+                #     horizontalalignment="left",
+                #     verticalalignment="center",
+                # )
                 break
 
     plt.title(to_plot)
@@ -478,16 +478,16 @@ def full_benchmark(
     fmt = lambda x, pos: si_format(x, precision=0) + y_suffix
     plt.gca().yaxis.set_major_formatter(mpl.ticker.FuncFormatter(fmt))
     
-    # plt.tight_layout()
+    plt.tight_layout()
 
-    # # Save as a .csv to put a nice Tikz figure in the papers:
-    # header = "Npoints, " + ", ".join(labels)
-    # os.makedirs("output", exist_ok=True)
-    # np.savetxt(
-    #     f"output/{to_plot}.csv",
-    #     benches,
-    #     fmt="%-9.5f",
-    #     header=header,
-    #     comments="",
-    #     delimiter=",",
-    # )
+    # Save as a .csv to put a nice Tikz figure in the papers:
+    header = "Npoints, " + ", ".join(labels)
+    os.makedirs("output", exist_ok=True)
+    np.savetxt(
+        f"output/{to_plot}.csv",
+        benches,
+        fmt="%-9.5f",
+        header=header,
+        comments="",
+        delimiter=",",
+    )

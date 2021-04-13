@@ -210,56 +210,61 @@ class torchtools:
         return torch.norm(x,p=p,dim=dim)
      
     @staticmethod
-    def kmeans(x,distance,K=10,Niter=15,device='cuda',approx=False,n=10,normalise=False):
+    def kmeans(x, distance=None, K=10, Niter=10, device="cuda", approx=False, n=10):
 
         from pykeops.torch import LazyTensor
 
-        def calc_centroid(x,c,cl,n=10):
+        if distance is None:
+            distance = torchtools.distance_function("euclidean")
+
+        def calc_centroid(x, c, cl, n=10):
             "Helper function to optimise centroid location"
-            c=torch.clone(c.detach()).to(device)
-            c.requires_grad=True
-            x1=LazyTensor(x.unsqueeze(0))
-            op=torch.optim.Adam([c],lr=1/n)
-            scaling=1/torch.gather(torch.bincount(cl),0,cl).view(-1,1)
-            scaling.requires_grad=False
+            c = torch.clone(c.detach()).to(device)
+            c.requires_grad = True
+            x1 = LazyTensor(x.unsqueeze(0))
+            op = torch.optim.Adam([c], lr=1 / n)
+            scaling = 1 / torch.gather(torch.bincount(cl), 0, cl).view(-1, 1)
+            scaling.requires_grad = False
             with torch.autograd.set_detect_anomaly(True):
                 for _ in range(n):
-                    c.requires_grad=True
+                    c.requires_grad = True
                     op.zero_grad()
-                    c1=LazyTensor(torch.index_select(c,0,cl).unsqueeze(0))
-                    d=distance(x1,c1)
-                    loss=(d.sum(0) * scaling).sum() #calculate distance to centroid for each datapoint, divide by total number of points in that cluster, and sum
+                    c1 = LazyTensor(torch.index_select(c, 0, cl).unsqueeze(0))
+                    d = distance(x1, c1)
+                    loss = (
+                        d.sum(0) * scaling
+                    ).sum()  # calculate distance to centroid for each datapoint, divide by total number of points in that cluster, and sum
                     loss.backward(retain_graph=False)
                     op.step()
-                    if normalise:
-                        with torch.no_grad():
-                            c=c/torch.norm(c,dim=-1).repeat_interleave(c.shape[1]).reshape(-1,c.shape[1]) #normalising centroids to have norm 1
             return c.detach()
 
-        N, D = x.shape  
-        c = x[:K, :].clone() 
-        x_i = LazyTensor(x.view(N, 1, D).to(device))  
+        N, D = x.shape
+        c = x[:K, :].clone()
+        x_i = LazyTensor(x.view(N, 1, D).to(device))
 
         for i in range(Niter):
-            c_j = LazyTensor(c.view(1, K, D).to(device))  
-            D_ij=distance(x_i,c_j)
-            cl = D_ij.argmin(dim=1).long().view(-1)  
+            c_j = LazyTensor(c.view(1, K, D).to(device))
+            D_ij = distance(x_i, c_j)
+            cl = D_ij.argmin(dim=1).long().view(-1)
 
-            #updating c: either with approximation or exact
+            # updating c: either with approximation or exact
             if approx:
-                #approximate with GD optimisation 
-                c=calc_centroid(x,c,cl,n)
+                # approximate with GD optimisation
+                c = calc_centroid(x, c, cl, n)
 
             else:
-                #exact from average
-                c.zero_() 
-                c.scatter_add_(0, cl[:, None].repeat(1, D), x) 
+                # exact from average
+                c.zero_()
+                c.scatter_add_(0, cl[:, None].repeat(1, D), x)
                 Ncl = torch.bincount(cl, minlength=K).type_as(c).view(K, 1)
-                c /= Ncl  
+                c /= Ncl
 
             if torch.any(torch.isnan(c)):
-                raise ValueError("NaN detected in centroids during KMeans, please check metric is correct")
+                raise ValueError(
+                    "NaN detected in centroids during KMeans, please check metric is correct"
+                )
         return cl, c
+
 
 
 def squared_distances(x, y):
@@ -280,39 +285,41 @@ def torch_kernel(x, y, s, kernel):
     return _kernel[kernel](sq, s)   
 
 class GenericIVF:
-    def __init__(
-        self, k, metric, normalise, LazyTensor, cluster_ranges_centroids, from_matrix
-    ):
+    """Abstract class to compute IVF functions
+    End-users should use 'pykeops.numpy.ivf' or 'pykeops.torch.ivf'
+    """
+
+    def __init__(self, k, metric, normalise, LazyTensor):
+
         self.__k = k
         self.__normalise = normalise
-
-
-
         self.__update_metric(metric)
         self.__LazyTensor = LazyTensor
-        self.__cluster_ranges_centroids = cluster_ranges_centroids
-        self.__from_matrix = from_matrix
+        self.__c = None
 
-        self.__c=None
-
-    def __update_metric(self,metric):
-        if isinstance(metric,str):
+    def __update_metric(self, metric):
+        if isinstance(metric, str):
             self.__distance = self.tools.distance_function(metric)
-            self.__metric=metric        
+            self.__metric = metric
         elif callable(metric):
-            self.__distance=metric
-            self.__metric='custom'        
+            self.__distance = metric
+            self.__metric = "custom"
         else:
-            raise ValueError("Unrecognised metric input type")    
+            raise ValueError("Unrecognised metric input type")
+
     @property
     def metric(self):
+        """Returns the metric used in the search"""
         return self.__metric
+
     @property
     def c(self):
+        """Returns the clusters obtained through K-Means"""
         if self.__c is not None:
             return self.__c
         else:
-            raise ValueError('Run .fit() first!')
+            raise ValueError("Run .fit() first!")
+
     def __get_tools(self):
         pass
 
@@ -345,7 +352,17 @@ class GenericIVF:
     def __unsort(self, nn):
         return self.tools.index_select(self.__x_perm[nn], 0, self.__y_perm.argsort())
 
-    def _fit(self, x, clusters=50, a=5, Niter=15, device=None, backend=None,approx=False,n=50):
+    def _fit(
+        self,
+        x,
+        clusters=50,
+        a=5,
+        Niter=15,
+        device=None,
+        backend=None,
+        approx=False,
+        n=50,
+    ):
         """
         Fits the main dataset
         """
@@ -366,30 +383,36 @@ class GenericIVF:
                 -1, x.shape[1]
             )
 
-        #if we want to use the approximation in Kmeans, and our metric is angular, switch to full angular metric 
-        if approx and self.__metric=='angular':
-            self.__update_metric('angular_full')
+        # if we want to use the approximation in Kmeans, and our metric is angular, switch to full angular metric
+        if approx and self.__metric == "angular":
+            self.__update_metric("angular_full")
 
         x = self.tools.contiguous(x)
         self.__device = device
         self.__backend = backend
 
         cl, c = self.tools.kmeans(
-            x, self.__distance, clusters, Niter=Niter, device=self.__device,approx=approx,normalise=self.__normalise
+            x,
+            self.__distance,
+            clusters,
+            Niter=Niter,
+            device=self.__device,
+            approx=approx,
+            n=n,
         )
 
         self.__c = c
         cl = self.__assign(x)
 
         ncl = self.__k_argmin(c, c, k=a)
-        self.__x_ranges, _, _ = self.__cluster_ranges_centroids(x, cl)
+        self.__x_ranges, _, _ = cluster_ranges_centroids(x, cl)
 
         x, x_labels = self.__sort_clusters(x, cl, store_x=True)
         self.__x = x
         r = self.tools.repeat(self.tools.arange(clusters, device=self.__device), a)
-        self.__keep = self.tools.to(self.tools.zeros(
-            [clusters, clusters], dtype=bool
-        ),self.__device)
+        self.__keep = self.tools.to(
+            self.tools.zeros([clusters, clusters], dtype=bool), self.__device
+        )
         self.__keep[r, ncl.flatten()] = True
 
         return self
@@ -418,18 +441,24 @@ class GenericIVF:
         y = self.tools.contiguous(y)
         y_labels = self.__assign(y)
 
-        y_ranges, _, _ = self.__cluster_ranges_centroids(y, y_labels)
+        y_ranges, _, _ = cluster_ranges_centroids(y, y_labels)
         self.__y_ranges = y_ranges
         y, y_labels = self.__sort_clusters(y, y_labels, store_x=False)
         x_LT = self.__LazyTensor(self.tools.unsqueeze(self.__x, 0))
         y_LT = self.__LazyTensor(self.tools.unsqueeze(y, 1))
         D_ij = self.__distance(y_LT, x_LT)
-        ranges_ij = self.__from_matrix(y_ranges, self.__x_ranges, self.__keep)
+        ranges_ij = from_matrix(y_ranges, self.__x_ranges, self.__keep)
         D_ij.ranges = ranges_ij
         nn = D_ij.argKmin(K=self.__k, axis=1)
         return self.__unsort(nn)
 
     def brute_force(self, x, y, k=5):
+        """Performs a brute force search with KeOps
+        Args:
+          x (array): Input dataset
+          y (array): Query dataset
+          k (int): Number of nearest neighbors to obtain
+        """
         x_LT = self.__LazyTensor(self.tools.unsqueeze(x, 0))
         y_LT = self.__LazyTensor(self.tools.unsqueeze(y, 1))
         D_ij = self.__distance(y_LT, x_LT)
@@ -437,16 +466,60 @@ class GenericIVF:
 
 
 class IVF(GenericIVF):
-    def __init__(self,k=5,metric='euclidean',normalise=False):
+    """IVF-Flat is a KNN approximation algorithm that first clusters the data and then performs the query search on a subset of the input dataset."""
+
+    def __init__(self, k=5, metric="euclidean", normalise=False):
+        """Initialise the IVF-Flat class.
+        IVF-Flat is a KNN approximation algorithm that first clusters the data and then performs the query search on a subset of the input dataset.
+        Args:
+          k (int): Number of nearest neighbours to obtain
+          metric (str,function): Metric to use
+            Currently, "euclidean", "manhattan", "angular" and "hyperbolic" are directly supported, apart from custom metrics
+            Hyperbolic metric requires the use of approx = True, during the fit() function later
+            Custom metrics should be in the form of a function with 2 inputs and returns their distance
+            For more information, refer to the tutorial
+          normalise (bool): Whether or not to normalise all input data to norm 1
+            This is used mainly for angular metric
+            In place of this, "angular_full" metric may be used instead
+        """
+        from pykeops.torch import LazyTensor
+
         self.__get_tools()
-        super().__init__(k=k,metric=metric,normalise=normalise,LazyTensor=LazyTensor,cluster_ranges_centroids=cluster_ranges_centroids,from_matrix=from_matrix)
+        super().__init__(k=k, metric=metric, normalise=normalise, LazyTensor=LazyTensor)
+
     def __get_tools(self):
+        # from pykeops.torch.utils import torchtools
+
         self.tools = torchtools
-    def fit(self,x,clusters=50,a=5,Niter=15,approx=False,n=50):
-        if type(x)!=torch.Tensor:
-            raise ValueError("Input dataset must be a torch tensor")    
-        return self._fit(x,clusters=clusters,a=a,Niter=Niter,device=x.device,approx=approx,n=n)
-    def kneighbors(self,y):
-        if type(y)!=torch.Tensor:
+
+    def fit(self, x, clusters=50, a=5, Niter=15, approx=False, n=50):
+        """Fits a dataset to perform the nearest neighbour search over
+        K-Means is performed on the dataset to obtain clusters
+        Then the closest clusters to each cluster is stored for use during query time
+        Args:
+          x (torch.Tensor): Torch tensor dataset of shape N, D
+            Where N is the number of points and D is the number of dimensions
+          clusters (int): Total number of clusters to create in K-Means
+          a (int): Number of clusters to search over, must be less than total number of clusters created
+          Niter (int): Number of iterations to run in K-Means algorithm
+          approx (bool): Whether or not to use an approximation step in K-Means
+            In hyperbolic metric and custom metric, this should be set to True
+            This is because the optimal cluster centroid may not have a simple closed form expression
+          n (int): Number of iterations to optimise the cluster centroid, when approx = True
+            A value of around 50 is recommended
+            Lower values are faster while higher values give better accuracy in centroid location
+        """
+        if type(x) != torch.Tensor:
+            raise ValueError("Input dataset must be a torch tensor")
+        return self._fit(
+            x, clusters=clusters, a=a, Niter=Niter, device=x.device, approx=approx, n=n
+        )
+
+    def kneighbors(self, y):
+        """Obtains the nearest neighbors for an input dataset from the fitted dataset
+        Args:
+          y (torch.Tensor): Input dataset to search over
+        """
+        if type(y) != torch.Tensor:
             raise ValueError("Query dataset must be a torch tensor")
         return self._kneighbors(y)
