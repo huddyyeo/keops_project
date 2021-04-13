@@ -1,6 +1,6 @@
 import numpy as np
 import pykeops
-from typing import TypeVar, Union
+from typing import TypeVar, Union, Tuple
 
 # Generic placeholder for numpy and torch variables.
 generic_array = TypeVar('generic_array')
@@ -193,8 +193,8 @@ class GenericNystrom:
 
         else:
             # labels for higher dimensions
-            x_labels, x_centroids = self.tools.kmeans(x)
-            y_labels, y_centroids = self.tools.kmeans(y)
+            x_labels, x_centroids = self._KMeans(x)
+            y_labels, y_centroids = self._KMeans(y)
             # compute ranges
             x_ranges = self.tools.cluster_ranges(x_labels)
             y_ranges = self.tools.cluster_ranges(y_labels)
@@ -249,3 +249,8 @@ class GenericNystrom:
             return np.random.RandomState(seed)
 
         raise ValueError(f'Seed {seed} must be None or an integer.')
+
+    def _KMeans(self,x:generic_array) -> Tuple[generic_array]:
+        '''K-means algorithm to find clusters for preprocessing'''
+
+        raise NotImplementedError('Subclass must implement this method.')
