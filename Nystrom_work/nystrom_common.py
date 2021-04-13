@@ -28,7 +28,6 @@ class GenericNystrom:
         n_iter = number of iterations for KMeans.
         dtype = type of data: np.float32 or np.float64
         inv_eps = additive invertibility constant for matrix decomposition.
-        backend = "GPU" or "CPU" mode for LazyTensors.
         verbose = set True to print details.
         random_state = to set a random seed for the random sampling of the samples.
                         To be used when  reproducibility is needed.
@@ -46,7 +45,7 @@ class GenericNystrom:
         self.tools = None
         self.LazyTensor = None
 
-        self.backend = 'cuda' if pykeops.config.gpu_available else 'cpu'
+        self.device = 'cuda' if pykeops.config.gpu_available else 'cpu'
 
         if inv_eps:
             self.inv_eps = inv_eps
@@ -60,9 +59,6 @@ class GenericNystrom:
         '''
         x = self._to_device(x)
         self.dtype = x.dtype
-
-        if self.verbose:
-            print(f'Working with backend = {self.backend}')
 
         # Basic checks
         assert self.tools.is_tensor(x), 'Input to fit(.) must be an array\
@@ -79,7 +75,7 @@ class GenericNystrom:
 
         if self.mask_radius is None:
             if self.kernel == 'rbf':
-                self.mask_radius = 2 * np.sqrt(2) * self.sigma
+                self.mask_radius = 2 * np.sqrt(2) * self.sigma * 16 
             elif self.kernel == 'exp':
                 self.mask_radius = 8 * self.sigma
 
@@ -107,20 +103,21 @@ class GenericNystrom:
         """
         print('_decomposition_and_norm needs to be implemented in the subclass')
 
-    def transform(self, x):
+    def transform(self, x:generic_array) -> generic_array:
         '''
-        Applies transform on the data.
+        Applies transform on the data mapping it to the feature space
+        which supports the approximated kernel.
         Args:
-            X [np.array or torch.tensor] = data to transform
+            X = data to transform
         Returns
-            X [np.array or torch.tensor] = data after transformation
+            X = data after transformation
         '''
         x = self._to_device(x)
         K_nq = self._pairwise_kernels(x, self.components_, dense=False)
         x_new = K_nq @ self.normalization_
         return x_new
 
-    def _pairwise_kernels(self, x, y=None, dense=False):
+    def _pairwise_kernels(self, x:generic_array, y:generic_array=None, dense=False):
         '''Helper function to build kernel
         Args:   x[np.array or torch.tensor] = data
                 y[np.array or torch.tensor] = array/tensor
@@ -142,12 +139,12 @@ class GenericNystrom:
         if self.kernel == 'rbf':
             if dense:
                 D_ij = ((x_i - x_j) ** 2).sum(axis=2)
-                K_ij = self.tools.exp(-D_ij)
+                K_ij = self.tools.exp(-D_ij / 2)
 
             else:
                 x_i, x_j = self.LazyTensor(x_i), self.LazyTensor(x_j)
                 D_ij = ((x_i - x_j) ** 2).sum(dim=2)
-                K_ij = (-D_ij).exp()
+                K_ij = (-D_ij / 2).exp()
 
                 # block-sparse reduction preprocess
                 K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
@@ -166,10 +163,6 @@ class GenericNystrom:
         else:
             print('Please note that computations on custom kernels are dense-only.')
             K_ij = self.kernel(x_i, x_j)
-
-
-        if not dense and self.backend == 'cuda':
-            K_ij.backend = 'GPU'
 
         return K_ij
 
@@ -216,8 +209,8 @@ class GenericNystrom:
         elif self.kernel == 'exp':
             D = self.tools.sqrt(self.tools.arraysum((x_centroids[:, None, :] - y_centroids[None, :, :]) ** 2, 2))
 
-        # keep = D < (self.mask_radius) ** 2
-        keep = D < 100
+        keep = D < (self.mask_radius) ** 2
+        # keep = D < 100
         # mask -> set of integer tensors
         ranges_ij = self.tools.from_matrix(x_ranges, y_ranges, keep)
         K_ij.ranges = ranges_ij  # block-sparsity pattern

@@ -21,7 +21,7 @@ class Nystrom(GenericNystrom):
         pass
 
     def _to_device(self, x):
-        return x.to(self.backend)
+        return x.to(self.device)
 
     def _decomposition_and_norm(self, basis_kernel):
         '''Function to return self.nomalization_ used in fit(.) function
@@ -30,18 +30,19 @@ class Nystrom(GenericNystrom):
         Returns:
             self.normalization_[torch.tensor]  X_q is the q x D-dimensional sub matrix of matrix X
             '''
-        id = torch.diag(torch.ones(basis_kernel.shape[1], dtype=self.dtype)).to(self.backend)
-        basis_kernel = basis_kernel.to(self.backend) @ id
+        id = torch.diag(torch.ones(basis_kernel.shape[1], dtype=self.dtype)).to(self.device)
+        basis_kernel = basis_kernel.to(self.device) @ id
         U, S, V = torch.linalg.svd(basis_kernel, full_matrices=False)
-        S = torch.maximum(S, torch.ones(S.size()).to(self.backend) * 1e-12)
+        S = torch.maximum(S, torch.ones(S.size()).to(self.device) * 1e-12)
         return torch.mm(U / torch.sqrt(S), V)
 
-    def K_approx(self, X: torch.tensor) -> torch.tensor:
+    def K_approx(self, X: torch.tensor) -> 'K_approx operator':
         ''' Function to return Nystrom approximation to the kernel.
         Args:
-            X[torch.tensor] = data used in fit(.) function.
+            X = data used in fit(.) function.
         Returns
-            K[torch.tensor] = Nystrom approximation to kernel'''
+            K_approx = Nystrom approximation to kernel which can be applied
+                        downstream as K_approx @ v for some 1d tensor v'''
 
         K_nq = self._pairwise_kernels(X, self.components_, dense=False)
         K_approx = K_approx_operator(K_nq, self.normalization_)
@@ -57,6 +58,7 @@ class K_approx_operator():
         self.normalization = normalization
 
     def __matmul__(self, x:torch.tensor) -> torch.tensor:
+
         x = self.K_nq.T @ x 
         x = self.normalization @ self.normalization.T @ x
         x = self.K_nq @ x

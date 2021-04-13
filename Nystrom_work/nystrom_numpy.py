@@ -1,9 +1,9 @@
 import numpy as np
 
-from scipy.linalg import svd
+from scipy.linalg import svd, eigh
 from scipy.sparse.linalg import aslinearoperator
 
-from nystrom_common import GenericNystrom
+from nystrom_common import GenericNystrom 
 from numpy_utils import numpytools
 from pykeops.numpy import LazyTensor
 
@@ -19,16 +19,17 @@ class Nystrom(GenericNystrom):
                          k_means, n_iter, inv_eps, verbose, random_state)
         
         self.tools = numpytools
-        self.backend = 'CPU'
         self.LazyTensor = LazyTensor
-    
+
     def _decomposition_and_norm(self, X:np.array) -> np.array:
+        '''Computes K_q^{-1/2}'''
 
         X = X + np.eye(X.shape[0], dtype=self.dtype)*self.inv_eps
-        U, S, V = svd(X)
+        S,U = eigh(X)
         S = np.maximum(S, 1e-12)
         
-        return np.dot(U / np.sqrt(S), V)
+        return np.dot(U / np.sqrt(S), U.T)
+        
 
     def K_approx(self, x:np.array) -> 'LinearOperator':
         ''' Function to return Nystrom approximation to the kernel.
