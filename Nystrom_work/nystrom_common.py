@@ -75,7 +75,8 @@ class GenericNystrom:
 
         if self.mask_radius is None:
             if self.kernel == 'rbf':
-                self.mask_radius = 2 * np.sqrt(2) * self.sigma * 16 
+                # TODO get mask_radius correct
+                self.mask_radius = 4 * self.sigma * 10  
             elif self.kernel == 'exp':
                 self.mask_radius = 8 * self.sigma
 
@@ -210,7 +211,6 @@ class GenericNystrom:
             D = self.tools.sqrt(self.tools.arraysum((x_centroids[:, None, :] - y_centroids[None, :, :]) ** 2, 2))
 
         keep = D < (self.mask_radius) ** 2
-        # keep = D < 100
         # mask -> set of integer tensors
         ranges_ij = self.tools.from_matrix(x_ranges, y_ranges, keep)
         K_ij.ranges = ranges_ij  # block-sparsity pattern
