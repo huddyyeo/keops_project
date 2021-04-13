@@ -46,7 +46,7 @@ class GenericNystrom:
         self.tools = None
         self.LazyTensor = None
 
-        self.backend = 'cuda' if pykeops.config.gpu_available else 'CPU'
+        self.backend = 'cuda' if pykeops.config.gpu_available else 'cpu'
 
         if inv_eps:
             self.inv_eps = inv_eps
@@ -170,6 +170,7 @@ class GenericNystrom:
 
         if not dense and self.backend == 'cuda':
             K_ij.backend = 'GPU'
+
         return K_ij
 
     def _Gauss_block_sparse_pre(self, x: generic_array, y: generic_array,
