@@ -24,7 +24,7 @@ class Nystrom(GenericNystrom):
     
     def _decomposition_and_norm(self, X:np.array) -> np.array:
 
-        X = X + np.eye(X.shape[0])*self.inv_eps
+        X = X + np.eye(X.shape[0], dtype=self.dtype)*self.inv_eps
         U, S, V = svd(X)
         S = np.maximum(S, 1e-12)
         
