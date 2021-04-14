@@ -30,17 +30,20 @@ class NNDescent:
 
         Args:
           data ((N,d) Tensor): Dataset of N datapoints of dimensionality d.
-          k (int): The number of neighbors to which each node connects in the search graph.
-          a (int): The number of clusters we want to search over using the cluster method.
+          k (int): The number of nearest neighbors which we want to find for each query point
           metric (string): Name of metric, either "euclidean" and "manhattan"
           initialization_method (string): The type of initialization to be used for
-            the search graph. Can be "random", "random_big" or "forest".
+            the search graph. Can be "random", "random_big", "forest" or "cluster".
           num_trees (int): Number of trees used in "random_big" or "forest" initializations.
-          leaf_multiplier (int): Parameter for the Tree class for tree-based initializations.
           big_leaf_depth (int): The depth at which the big leaves are taken to be used at
             the start of search.
           verbose (boolean): Determines whether or not to print information while fitting.
           LT (boolean): Determines if we want to use LazyTensors in cluster initialization.
+          
+        Arg not used when initialization_method = "cluster":
+          leaf_multiplier (int): Parameter for the Tree class for tree-based initializations.
+          when initialization_method = "cluster", this parameter is used to adjust the number
+            of clusters to be close to the value specified in the fit function.
         """
 
         # Setting parameters
@@ -59,9 +62,6 @@ class NNDescent:
 
     def distance(self, x, y):
         # Square of euclidian distance. Skip the root for faster computation.
-        # if self.LT and type(x)==torch.Tensor and type(y)==torch.Tensor:
-        #     x = LazyTensor(x.to(device))
-        #     y = LazyTensor(y.to(device))
         if self.metric == "euclidean":
             return ((x - y) ** 2).sum(-1)
         elif self.metric == "manhattan":
@@ -78,13 +78,23 @@ class NNDescent:
           X ((N,d) Tensor): Dataset of N datapoints of dimensionality d.
           iter (int): Maximum number of iterations for graph updates
           verbose (boolean): Determines whether or not to print information while fitting.
+          queue (int): The number of neighbors to which each node connects in the search graph.
+          
+        Used only when initialization_method = "cluster":
+          clusters (int): The min no. of clusters that we want the data to be clustered into
+          a (int): The number of clusters we want to search over using the cluster method.
+          
         """
         self.data = X
         self.queue = queue
 
-        if self.queue < self.k and self.init_method is not 'cluster':
+        if queue < self.k and self.init_method is not 'cluster':
             self.queue = self.k
             print("Warning: Value of queue must be larger than or equal to k! Set queue = k.")
+        elif queue > a and self.init_method is 'cluster':
+            raise ValueError(
+                "Value of queue must be smaller than value of a!"
+            )
         elif clusters < 32:
             raise ValueError(
                 "Minimum number of clusters is 32!"
@@ -193,6 +203,9 @@ class NNDescent:
 
         Our code is largely based on this algorithm:
           https://pynndescent.readthedocs.io/en/latest/how_pynndescent_works.html#Searching-using-a-nearest-neighbor-graph
+          
+        If init_method = 'clusters', we first cluster the data. Each node in the graph then represents a cluster.
+        We then use the KeOps engine to perform the final nearest neighbours search over the nearest clusters to each query point
 
         Args:
           X ((N,d) Tensor): A query set for which to find k neighbors.
@@ -348,7 +361,7 @@ class NNDescent:
             self.explored_edges.update(neighbor_indices)
 
     def _initialize_graph_randomly(self):
-        """Initializes self.graph with random values such that each point has k distinct neighbors"""
+        """Initializes self.graph with random values such that each point has 'queue' distinct neighbors"""
         N, k = self.graph.shape
         # Initialize graph randomly, removing self-loops
         self.graph = torch.randint(high=N - 1, size=[N, k], dtype=torch.long)
@@ -389,7 +402,7 @@ class NNDescent:
             self.graph[i] = temp_row[indices]  # assign KNN to graph
 
     def _initialize_graph_forest(self, data, numtrees, leaf_multiplier, big_leaf_depth):
-        """Initializes self.graph with a forest of random trees, such that each point has k distinct neighbors"""
+        """Initializes self.graph with a forest of random trees, such that each point has 'queue' distinct neighbors"""
         N, k = self.graph.shape
         dim = data.shape[1]
 
@@ -467,7 +480,7 @@ class NNDescent:
             print("WARNING!", warning_count, " INDICES ARE RANDOM!")
 
     def _initialize_graph_clusters(self, data):
-        """Initializes self.graph on cluster centroids, such that each cluster has k distinct neighbors"""
+        """Initializes self.graph on cluster centroids, such that each cluster has 'a' distinct neighbors"""
         N, dim = data.shape
         k = self.k
         a = self.a
