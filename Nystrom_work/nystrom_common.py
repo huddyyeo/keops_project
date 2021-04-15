@@ -102,7 +102,8 @@ class GenericNystrom:
         """
         To be defined in the subclass
         """
-        print('_decomposition_and_norm needs to be implemented in the subclass')
+        raise NotImplementedError('Subclass must implement the method _decomposition_and_norm.')
+        
 
     def transform(self, x:generic_array) -> generic_array:
         '''
