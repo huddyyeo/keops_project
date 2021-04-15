@@ -76,7 +76,7 @@ class GenericNystrom:
         if self.mask_radius is None:
             if self.kernel == 'rbf':
                 # TODO get mask_radius correct
-                self.mask_radius = 4 * self.sigma * 10  
+                self.mask_radius = 8 * self.sigma  
             elif self.kernel == 'exp':
                 self.mask_radius = 8 * self.sigma
 
@@ -115,7 +115,7 @@ class GenericNystrom:
             X = data after transformation
         '''
         x = self._to_device(x)
-        K_nq = self._pairwise_kernels(x, self.components_, dense=dense)
+        K_nq = self._pairwise_kernels(x, self.components_, dense=False)
         x_new = K_nq @ self.normalization_
         return x_new
 
