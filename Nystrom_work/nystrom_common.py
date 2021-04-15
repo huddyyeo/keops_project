@@ -141,12 +141,12 @@ class GenericNystrom:
         if self.kernel == 'rbf':
             if dense:
                 D_ij = ((x_i - x_j) ** 2).sum(axis=2)
-                K_ij = self.tools.exp(-D_ij / 2)
+                K_ij = self.tools.exp(-D_ij)
 
             else:
                 x_i, x_j = self.LazyTensor(x_i), self.LazyTensor(x_j)
                 D_ij = ((x_i - x_j) ** 2).sum(dim=2)
-                K_ij = (-D_ij / 2).exp()
+                K_ij = (-D_ij).exp()
 
                 # block-sparse reduction preprocess
                 K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
