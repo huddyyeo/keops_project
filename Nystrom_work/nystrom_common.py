@@ -105,7 +105,7 @@ class GenericNystrom:
         raise NotImplementedError('Subclass must implement the method _decomposition_and_norm.')
         
 
-    def transform(self, x:generic_array) -> generic_array:
+    def transform(self, x:generic_array, dense=False) -> generic_array:
         '''
         Applies transform on the data mapping it to the feature space
         which supports the approximated kernel.
@@ -115,7 +115,7 @@ class GenericNystrom:
             X = data after transformation
         '''
         x = self._to_device(x)
-        K_nq = self._pairwise_kernels(x, self.components_, dense=False)
+        K_nq = self._pairwise_kernels(x, self.components_, dense=dense)
         x_new = K_nq @ self.normalization_
         return x_new
 
