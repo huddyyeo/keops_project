@@ -10,6 +10,7 @@ if use_cuda:
 else:
     device = torch.device("cpu")
 
+
 class NNDescent:
     def __init__(
         self,
@@ -39,7 +40,7 @@ class NNDescent:
             the start of search.
           verbose (boolean): Determines whether or not to print information while fitting.
           LT (boolean): Determines if we want to use LazyTensors in cluster initialization.
-          
+
         Arg not used when initialization_method = "cluster":
           leaf_multiplier (int): Parameter for the Tree class for tree-based initializations.
           when initialization_method = "cluster", this parameter is used to adjust the number
@@ -67,9 +68,7 @@ class NNDescent:
         elif self.metric == "manhattan":
             return ((x - y).abs()).sum(-1)
         else:
-            raise ValueError(
-                "Metric not implemented!"
-            )
+            raise ValueError("Metric not implemented!")
 
     def fit(self, X, iter=20, verbose=False, clusters=32, a=10, queue=5):
         """Fits the NNDescent search graph to the data set X.
@@ -79,31 +78,27 @@ class NNDescent:
           iter (int): Maximum number of iterations for graph updates
           verbose (boolean): Determines whether or not to print information while fitting.
           queue (int): The number of neighbors to which each node connects in the search graph.
-          
+
         Used only when initialization_method = "cluster":
           clusters (int): The min no. of clusters that we want the data to be clustered into
           a (int): The number of clusters we want to search over using the cluster method.
-          
+
         """
         self.data = X
         self.queue = queue
 
-        if queue < self.k and self.init_method is not 'cluster':
+        if queue < self.k and self.init_method is not "cluster":
             self.queue = self.k
-            print("Warning: Value of queue must be larger than or equal to k! Set queue = k.")
-        elif queue > a and self.init_method is 'cluster':
-            raise ValueError(
-                "Value of queue must be smaller than value of a!"
+            print(
+                "Warning: Value of queue must be larger than or equal to k! Set queue = k."
             )
+        elif queue > a and self.init_method is "cluster":
+            raise ValueError("Value of queue must be smaller than value of a!")
         elif clusters < 32:
-            raise ValueError(
-                "Minimum number of clusters is 32!"
-            )
+            raise ValueError("Minimum number of clusters is 32!")
         elif a > clusters:
-            raise ValueError(
-                "Number of clusters must be larger than or equal to a!"
-            )
-        
+            raise ValueError("Number of clusters must be larger than or equal to a!")
+
         # A 2D tensor representing a directed graph.
         # The value a = graph[i,j] represents an edge from point x_i to x_a.
         N = X.shape[0]
@@ -203,7 +198,7 @@ class NNDescent:
 
         Our code is largely based on this algorithm:
           https://pynndescent.readthedocs.io/en/latest/how_pynndescent_works.html#Searching-using-a-nearest-neighbor-graph
-          
+
         If init_method = 'clusters', we first cluster the data. Each node in the graph then represents a cluster.
         We then use the KeOps engine to perform the final nearest neighbours search over the nearest clusters to each query point
 
@@ -343,9 +338,9 @@ class NNDescent:
             )
 
         if self.init_method == "cluster":
-            return self.final_brute_force(candidate_idx[:, :self.k], X)
+            return self.final_brute_force(candidate_idx[:, : self.k], X)
         else:
-            return candidate_idx[:, :self.k]
+            return candidate_idx[:, : self.k]
 
     def _calculate_all_distances(self):
         """Updates the distances (self.k_distances) of the edges found in self.graph."""
@@ -485,7 +480,9 @@ class NNDescent:
         k = self.k
         a = self.a
         LT = self.LT
-        leaf_multiplier = N/self.num_clusters/k # to get number of clusters ~ num_clusters
+        leaf_multiplier = (
+            N / self.num_clusters / k
+        )  # to get number of clusters ~ num_clusters
         self.clusters = (
             torch.ones(
                 N,
@@ -536,7 +533,7 @@ class NNDescent:
             torch.cuda.synchronize()
 
         k = self.k
-            
+
         x = self.data_orig.to(device)
         x_labels = self.clusters.long()
         y = query_pts.to(device)
