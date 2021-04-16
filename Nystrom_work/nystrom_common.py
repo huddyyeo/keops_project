@@ -115,7 +115,7 @@ class GenericNystrom:
             X = data after transformation
         '''
         x = self._to_device(x)
-        K_nq = self._pairwise_kernels(x, self.components_, dense=False)
+        K_nq = self._pairwise_kernels(x, self.components_, dense=dense)
         x_new = K_nq @ self.normalization_
         return x_new
 
