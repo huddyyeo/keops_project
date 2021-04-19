@@ -115,10 +115,10 @@ class GenericNystrom:
         Returns
             X = data after transformation
         '''
-        if x.dtype == np.array and dense==False:
+        if type(x) == np.ndarray and not dense:
             warnings.warn("For Numpy transform it is best to use dense=True")
-	
-	x = self._to_device(x)
+            
+        x = self._to_device(x)
         K_nq = self._pairwise_kernels(x, self.components_, dense=dense)
         x_new = K_nq @ self.normalization_
         return x_new
