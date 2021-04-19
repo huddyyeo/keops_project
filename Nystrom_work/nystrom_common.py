@@ -1,6 +1,7 @@
 import numpy as np
 import pykeops
 from typing import TypeVar, Union, Tuple
+import warnings
 
 # Generic placeholder for numpy and torch variables.
 generic_array = TypeVar('generic_array')
@@ -105,7 +106,7 @@ class GenericNystrom:
         raise NotImplementedError('Subclass must implement the method _decomposition_and_norm.')
         
 
-    def transform(self, x:generic_array, dense=False) -> generic_array:
+    def transform(self, x:generic_array, dense=True) -> generic_array:
         '''
         Applies transform on the data mapping it to the feature space
         which supports the approximated kernel.
@@ -114,7 +115,10 @@ class GenericNystrom:
         Returns
             X = data after transformation
         '''
-        x = self._to_device(x)
+        if x.dtype == np.array and dense==False:
+            warnings.warn("For Numpy transform it is best to use dense=True")
+	
+	x = self._to_device(x)
         K_nq = self._pairwise_kernels(x, self.components_, dense=dense)
         x_new = K_nq @ self.normalization_
         return x_new
