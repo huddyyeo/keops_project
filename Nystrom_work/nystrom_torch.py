@@ -30,8 +30,7 @@ class Nystrom(GenericNystrom):
         Returns:
             self.normalization_[torch.tensor]  X_q is the q x D-dimensional sub matrix of matrix X
             '''
-        id = torch.diag(torch.ones(basis_kernel.shape[1], dtype=self.dtype)).to(self.device)
-        basis_kernel = basis_kernel.to(self.device) @ id
+        basis_kernel = basis_kernel.to(self.device)
         U, S, V = torch.linalg.svd(basis_kernel, full_matrices=False)
         S = torch.maximum(S, torch.ones(S.size()).to(self.device) * 1e-12)
         return torch.mm(U / torch.sqrt(S), V)
