@@ -30,10 +30,10 @@ class Nystrom(GenericNystrom):
         Returns:
             self.normalization_[torch.tensor]  X_q is the q x D-dimensional sub matrix of matrix X
             '''
-        basis_kernel = basis_kernel.to(self.device)
+        basis_kernel = basis_kernel.to(self.device) # dim: num_components x num_components
         U, S, V = torch.linalg.svd(basis_kernel, full_matrices=False)
         S = torch.maximum(S, torch.ones(S.size()).to(self.device) * 1e-12)
-        return torch.mm(U / torch.sqrt(S), V)
+        return torch.mm(U / torch.sqrt(S), V)   # dim: num_components x num_components
 
     def K_approx(self, X: torch.tensor) -> 'K_approx operator':
         ''' Function to return Nystrom approximation to the kernel.
@@ -80,7 +80,7 @@ class K_approx_operator():
 
     def __init__(self, K_nq, normalization):
 
-        self.K_nq = K_nq
+        self.K_nq = K_nq # dim: number of samples x num_components
         self.normalization = normalization
 
     def __matmul__(self, x:torch.tensor) -> torch.tensor:
