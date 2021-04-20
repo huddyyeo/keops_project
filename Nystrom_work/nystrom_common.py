@@ -85,13 +85,16 @@ class GenericNystrom:
         self._update_dtype(x)
         # Number of samples
         n_samples = x.shape[0]
+
         # Define basis
         rnd = self._check_random_state(self.random_state)
         inds = rnd.permutation(n_samples)
         basis_inds = inds[:self.n_components]
         basis = x[basis_inds]
+
         # Build smaller kernel
         basis_kernel = self._pairwise_kernels(basis, dense=True)
+
         # Decomposition is an abstract method that needs to be defined in each class
         self.normalization_ = self._decomposition_and_norm(basis_kernel)
         self.components_ = basis

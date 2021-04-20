@@ -31,7 +31,7 @@ class Nystrom(GenericNystrom):
             self.normalization_[torch.tensor]  X_q is the q x D-dimensional sub matrix of matrix X
             '''
         basis_kernel = basis_kernel.to(self.device) # dim: num_components x num_components
-        U, S, V = torch.linalg.svd(basis_kernel, full_matrices=False)
+        U, S, V = torch.linalg.svd(basis_kernel, full_matrices=False) # dim: [100,100] x [100] x [100,100]
         S = torch.maximum(S, torch.ones(S.size()).to(self.device) * 1e-12)
         return torch.mm(U / torch.sqrt(S), V)   # dim: num_components x num_components
 
