@@ -81,6 +81,7 @@ class K_approx_operator():
     def __init__(self, K_nq, normalization):
 
         self.K_nq = K_nq # dim: number of samples x num_components
+        self.K_nq.backend="GPU_2D"
         self.normalization = normalization
 
     def __matmul__(self, x:torch.tensor) -> torch.tensor:
