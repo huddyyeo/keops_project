@@ -87,8 +87,6 @@ class NNDescent:
             print(
                 "Warning: Value of queue must be larger than or equal to k! Set queue = k."
             )
-        elif queue > a and self.init_method is "cluster":
-            raise ValueError("Value of queue must be smaller than value of a!")
         elif clusters < 2 ** self.big_leaf_depth:
             # This is neccesary to use the more efficient initial points in the graph search.
             raise ValueError("Minimum number of clusters is 2^big_leaf_depth!")
