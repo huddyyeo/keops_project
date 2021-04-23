@@ -40,7 +40,7 @@ class GenericNystroem:
         self.verbose = verbose
         self.random_state = random_state
         self.tools = None
-        self.LazyTensor = None
+        self.lazy_tensor = None
 
         if inv_eps:
             self.inv_eps = inv_eps
@@ -136,7 +136,7 @@ class GenericNystroem:
                 K_ij = self.tools.exp(-D_ij)
 
             else:
-                x_i, x_j = self.LazyTensor(x_i), self.LazyTensor(x_j)
+                x_i, x_j = self.lazy_tensor(x_i), self.lazy_tensor(x_j)
                 D_ij = ((x_i - x_j) ** 2).sum(dim=2)
                 K_ij = (-D_ij).exp()
 
@@ -145,7 +145,7 @@ class GenericNystroem:
                 K_ij = self.tools.exp(-self.tools.sqrt((((x_i - x_j) ** 2).sum(axis=2))))
 
             else:
-                x_i, x_j = self.LazyTensor(x_i), self.LazyTensor(x_j)
+                x_i, x_j = self.lazy_tensor(x_i), self.lazy_tensor(x_j)
                 K_ij = (-(((x_i - x_j) ** 2).sum(-1)).sqrt()).exp()
 
         # computation with custom kernel
