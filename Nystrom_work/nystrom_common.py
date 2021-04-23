@@ -156,7 +156,7 @@ class GenericNystrom:
                 K_ij = (-D_ij).exp()
 
                 # block-sparse reduction preprocess
-                K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
+                # K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
         elif self.kernel == 'exp':
             if dense:
                 K_ij = self.tools.exp(-self.tools.sqrt((((x_i - x_j) ** 2).sum(axis=2))))
@@ -166,7 +166,7 @@ class GenericNystrom:
                 K_ij = (-(((x_i - x_j) ** 2).sum(-1)).sqrt()).exp()
 
                 # block-sparse reduction preprocess
-                K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
+                # K_ij = self._Gauss_block_sparse_pre(x, y, K_ij)
 
         # computation with custom kernel
         else:
