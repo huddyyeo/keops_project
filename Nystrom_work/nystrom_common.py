@@ -8,7 +8,7 @@ generic_array = TypeVar('generic_array')
 GenericLazyTensor = TypeVar('GenericLazyTensor')
 
 
-class GenericNystrom:
+class GenericNystroem:
     '''Super class defining the Nystrom operations. The end user should
     use numpy.nystrom or torch.nystrom subclasses.'''
 
@@ -42,8 +42,6 @@ class GenericNystrom:
         self.tools = None
         self.LazyTensor = None
 
-        self.device = 'cuda' if pykeops.config.gpu_available else 'cpu'
-
         if inv_eps:
             self.inv_eps = inv_eps
         else:
@@ -54,7 +52,6 @@ class GenericNystrom:
         Args:   x = array or tensor of shape (n_samples, n_features)
         Returns: Fitted instance of the class
         '''
-        x = self._to_device(x)
         self.dtype = x.dtype
 
         # Basic checks
@@ -110,7 +107,6 @@ class GenericNystrom:
         if type(x) == np.ndarray and not dense:
             warnings.warn("For Numpy transform it is best to use dense=True")
             
-        x = self._to_device(x)
         K_nq = self._pairwise_kernels(x, self.components_, dense=dense)
         x_new = K_nq @ self.normalization_
         return x_new
@@ -131,8 +127,8 @@ class GenericNystrom:
         x = x / self.sigma
         y = y / self.sigma
 
-        x_i, x_j = self.tools.contiguous(self._to_device(x[:, None, :])), self.tools.contiguous(
-            self._to_device(y[None, :, :]))
+        x_i, x_j = self.tools.contiguous(x[:, None, :]), self.tools.contiguous(
+            y[None, :, :])
 
         if self.kernel == 'rbf':
             if dense:
@@ -160,9 +156,6 @@ class GenericNystrom:
         return K_ij
 
     def _astype(self, data, type):
-        return data
-
-    def _to_device(self, data):
         return data
 
     def _update_dtype(self, x):

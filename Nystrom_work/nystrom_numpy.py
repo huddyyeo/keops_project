@@ -3,13 +3,13 @@ import numpy as np
 from scipy.linalg import svd, eigh
 from scipy.sparse.linalg import aslinearoperator
 
-from nystrom_common import GenericNystrom 
+from nystrom_common import GenericNystroem 
 from numpy_utils import numpytools 
 from pykeops.numpy import LazyTensor
 
 from typing import Tuple, List
 
-class Nystrom(GenericNystrom):
+class Nystroem(GenericNystroem):
     '''Nystrom class to work with Numpy arrays'''
 
     def __init__(self, n_components=100, kernel='rbf', sigma:float = None,

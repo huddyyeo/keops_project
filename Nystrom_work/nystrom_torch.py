@@ -1,11 +1,11 @@
 import torch
 
-from nystrom_common import GenericNystrom 
+from nystrom_common import GenericNystroem 
 from torch_utils import torchtools 
 from pykeops.torch import LazyTensor
 
 
-class Nystrom(GenericNystrom):
+class Nystroem(GenericNystroem):
 
     def __init__(self, n_components=100, kernel='rbf', sigma: float = None,
                  eps: float = 0.05, n_iter: int = 10, inv_eps: float = None, 
@@ -21,8 +21,6 @@ class Nystrom(GenericNystrom):
     def _update_dtype(self, x):
         pass
 
-    def _to_device(self, x):
-        return x.to(self.device)
 
     def _decomposition_and_norm(self, basis_kernel):
         '''Function to return self.nomalization_ used in fit(.) function
@@ -31,9 +29,9 @@ class Nystrom(GenericNystrom):
         Returns:
             self.normalization_[torch.tensor]  X_q is the q x D-dimensional sub matrix of matrix X
             '''
-        basis_kernel = basis_kernel.to(self.device) # dim: num_components x num_components
+        basis_kernel = basis_kernel # dim: num_components x num_components
         U, S, V = torch.linalg.svd(basis_kernel, full_matrices=False) # dim: [100,100] x [100] x [100,100]
-        S = torch.maximum(S, torch.ones(S.size()).to(self.device) * 1e-12)
+        S = torch.maximum(S, torch.ones(S.size()) * 1e-12)
         return torch.mm(U / torch.sqrt(S), V)   # dim: num_components x num_components
 
     def K_approx(self, X: torch.tensor) -> 'K_approx operator':
