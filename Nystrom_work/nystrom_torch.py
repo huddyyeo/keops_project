@@ -8,10 +8,11 @@ from pykeops.torch import LazyTensor
 class Nystrom(GenericNystrom):
 
     def __init__(self, n_components=100, kernel='rbf', sigma: float = None,
-                 eps: float = 0.05, mask_radius: float = None, k_means=10,
-                 n_iter: int = 10, inv_eps: float = None, verbose=False, random_state=None, tools=None):
-        super().__init__(n_components, kernel, sigma, eps, mask_radius, k_means,
-                         n_iter, inv_eps, verbose, random_state)
+                 eps: float = 0.05, n_iter: int = 10, inv_eps: float = None, 
+                 verbose=False, random_state=None, tools=None):
+
+        super().__init__(n_components, kernel, sigma, eps, inv_eps, 
+                    verbose, random_state)
 
         self.tools = torchtools
         self.verbose = verbose
@@ -46,33 +47,6 @@ class Nystrom(GenericNystrom):
         K_nq = self._pairwise_kernels(X, self.components_, dense=False)
         K_approx = K_approx_operator(K_nq, self.normalization_)
         return K_approx
-
-    
-    def _KMeans(self, x: torch.tensor):
-        ''' KMeans with Pykeops to do binning of original data.
-        Args:
-            x = data
-        Returns:
-            labels[np.array] = class labels for each point in x
-            clusters[np.array] = coordinates for each centroid
-        '''
-
-        N, D = x.shape
-        clusters = torch.clone(x[:self.k_means, :])  # initialization of clusters
-        x_i = LazyTensor(x[:, None, :])
-
-        for i in range(self.n_iter):
-
-            clusters_j = LazyTensor(clusters[None, :, :])
-            D_ij = ((x_i - clusters_j) ** 2).sum(-1)  # points-clusters kernel
-            labels = D_ij.argmin(axis=1).reshape(N)  # Points -> Nearest cluster
-            Ncl = torch.bincount(labels)  # Class weights
-            for d in range(D):  # Compute the cluster centroids with np.bincount:
-                clusters[:, d] = torch.bincount(labels, weights=x[:, d]) / Ncl
-
-        return labels, clusters
-
-
 
 class K_approx_operator():
     ''' Helper class to return K_approx as an object 

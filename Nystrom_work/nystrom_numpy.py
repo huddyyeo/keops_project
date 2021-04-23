@@ -13,8 +13,7 @@ class Nystrom(GenericNystrom):
     '''Nystrom class to work with Numpy arrays'''
 
     def __init__(self, n_components=100, kernel='rbf', sigma:float = None,
-                 eps:float = 0.05, mask_radius:float = None, k_means = 10, 
-                 n_iter:int = 10, inv_eps:float = None,
+                 eps:float = 0.05, inv_eps:float = None,
                   verbose = False, random_state=None, eigvals:List[int]=None):
 
         '''
@@ -23,8 +22,8 @@ class Nystrom(GenericNystrom):
              where 0 <= a < b < length of K_q
             
         '''
-        super().__init__(n_components, kernel, sigma, eps, mask_radius,
-                         k_means, n_iter, inv_eps, verbose, random_state)
+        super().__init__(n_components, kernel, sigma, eps, inv_eps, verbose, 
+                        random_state)
         
         self.tools = numpytools
         self.LazyTensor = LazyTensor
@@ -64,27 +63,3 @@ class Nystrom(GenericNystrom):
 
     def _astype(self, data, d_type):
         return data.astype(d_type)
-
-
-    def _KMeans(self,x:np.array) -> Tuple[np.array]:
-        ''' KMeans with Pykeops to do binning of original data.
-        Args:
-            x = data
-        Returns:
-            labels = class labels for each point in x
-            clusters = coordinates for each centroid
-        '''
-        N, D = x.shape  
-        clusters = np.copy(x[:self.k_means, :])  # initialization of clusters
-        x_i = LazyTensor(x[:, None, :])  
-
-        for i in range(self.n_iter):
-
-            clusters_j = LazyTensor(clusters[None, :, :])  
-            D_ij = ((x_i - clusters_j) ** 2).sum(-1)  # points-clusters kernel
-            labels = D_ij.argmin(axis=1).astype(int).reshape(N)  # Points -> Nearest cluster
-            Ncl = np.bincount(labels).astype(self.dtype)  # Class weights
-            for d in range(D):  # Compute the cluster centroids with np.bincount:
-                clusters[:, d] = np.bincount(labels, weights=x[:, d]) / Ncl
-
-        return labels, clusters
