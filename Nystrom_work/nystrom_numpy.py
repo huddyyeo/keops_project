@@ -42,7 +42,7 @@ class Nystroem(GenericNystroem):
         S = np.maximum(S, 1e-12)
         return np.dot(U / np.sqrt(S), U.T) # (Q,Q)
 
-    def get_kernel(self, x, y, kernel):
+    def get_kernel(self, x, y, kernel=None):
 
         D_xx = np.sum((x ** 2), axis=-1)[:, None]  # (N,1)
         D_xy = x @ y.T  # (N,D) @ (D,M) = (N,M)
