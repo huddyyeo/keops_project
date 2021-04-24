@@ -149,9 +149,6 @@ class GenericNystroem:
 
         return K_ij # (N, N)
 
-    def _astype(self, data, type):
-        return data
-
     def _update_dtype(self, x):
         ''' Helper function that sets dtype to that of
             the given data in the fitting step.

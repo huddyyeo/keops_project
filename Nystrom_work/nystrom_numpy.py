@@ -59,5 +59,3 @@ class Nystroem(GenericNystroem):
         K_approx = K_nq @ K_q_inv @ K_nq.T # (N,Q), (Q,Q), (Q,N)
         return K_approx # (N, N)
 
-    def _astype(self, data, d_type):
-        return data.astype(d_type)
