@@ -77,9 +77,9 @@ class GenericNystroem:
         basis_kernel = self._pairwise_kernels(basis, dense=True)
 
         # Decomposition is an abstract method that needs to be defined in each class
-        self.normalization_ = self._decomposition_and_norm(basis_kernel)
-        self.components_ = basis
-        self.component_indices_ = inds
+        self.normalization = self._decomposition_and_norm(basis_kernel)
+        self.components = basis
+        self.component_indices = inds
 
         return self
 
@@ -102,8 +102,8 @@ class GenericNystroem:
         if type(x) == np.ndarray and not dense:
             warnings.warn("For Numpy transform it is best to use dense=True")
             
-        K_nq = self._pairwise_kernels(x, self.components_, dense=dense)
-        x_new = K_nq @ self.normalization_
+        K_nq = self._pairwise_kernels(x, self.components, dense=dense)
+        x_new = K_nq @ self.normalization
         return x_new
 
     def _pairwise_kernels(self, x:generic_array, y:generic_array=None, dense=False):

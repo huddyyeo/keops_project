@@ -52,11 +52,11 @@ class Nystroem(GenericNystroem):
         Returns
             K(operator): Nystrom approximation to kernel'''
     
-        K_nq = self._pairwise_kernels(x, self.components_, dense=False)
+        K_nq = self._pairwise_kernels(x, self.components, dense=False)
         K_nq.backend="GPU_2D"
         K_nq = aslinearoperator(K_nq)
-        K_q_inv = (aslinearoperator(self.normalization_).T @ 
-                    aslinearoperator(self.normalization_) 
+        K_q_inv = (aslinearoperator(self.normalization).T @
+                    aslinearoperator(self.normalization)
                 )
         K_approx = K_nq @ K_q_inv @ K_nq.T
         return K_approx 
