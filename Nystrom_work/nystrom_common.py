@@ -126,8 +126,7 @@ class GenericNystroem:
 
         if self.kernel == 'rbf':
             if dense:
-                D_ij = ((x_i - x_j) ** 2).sum(axis=2)
-                K_ij = self.tools.exp(-D_ij)
+                K_ij = self.get_kernel(x,y)
 
             else:
                 x_i, x_j = self.lazy_tensor(x_i), self.lazy_tensor(x_j)
@@ -136,7 +135,7 @@ class GenericNystroem:
 
         elif self.kernel == 'exp':
             if dense:
-                K_ij = self.tools.exp(-self.tools.sqrt((((x_i - x_j) ** 2).sum(axis=2))))
+                K_ij = self.get_kernel(x,y, kernel= 'exp')
 
             else:
                 x_i, x_j = self.lazy_tensor(x_i), self.lazy_tensor(x_j)

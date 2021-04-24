@@ -32,6 +32,15 @@ class Nystroem(GenericNystroem):
         S = torch.maximum(S, torch.ones(S.size()) * 1e-12)
         return U / torch.sqrt(S)@ V   # (Q,Q)
 
+    def kernel(self, x,y, kernel):
+        D_xx = (x * x).sum(-1).unsqueeze(1)  # (N,1)
+        D_xy = torch.matmul(x, y.permute(1, 0))  # (N,D) @ (D,M) = (N,M)
+        D_yy = (y * y).sum(-1).unsqueeze(0)  # (1,M)
+        D_xy = D_xx - 2 * D_xy + D_yy  # (N,M)
+        if kernel == 'exp':
+            D_xy = torch.sqrt(D_xy)
+        return (-D_xy).exp()  # (N,M)
+
     def K_approx(self, X: torch.tensor) -> 'K_approx operator':
         ''' Function to return Nystrom approximation to the kernel.
         Args:
@@ -59,4 +68,6 @@ class K_approx_operator():
         x = self.normalization @ self.normalization.T @ x # (Q,Q), (Q,Q), (Q, B)
         x = self.K_nq @ x # (N,Q), (Q,B)
         return x # (N,B)
+
+
 

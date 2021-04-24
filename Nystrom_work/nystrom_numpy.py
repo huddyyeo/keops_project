@@ -33,6 +33,7 @@ class Nystroem(GenericNystroem):
             assert eigvals[1] < n_components, 'max eigenvalue index needs to be less\
             than size of K_q = n_components'
 
+
     def _decomposition_and_norm(self, K:np.array) -> np.array:
         '''Computes K_q^{-1/2}'''
 
@@ -40,6 +41,16 @@ class Nystroem(GenericNystroem):
         S,U = eigh(K, eigvals=self.eigvals) # (Q,), (Q,Q)
         S = np.maximum(S, 1e-12)
         return np.dot(U / np.sqrt(S), U.T) # (Q,Q)
+
+    def get_kernel(self, x, y, kernel):
+
+        D_xx = np.sum((x ** 2), axis=-1)[:, None]  # (N,1)
+        D_xy = x @ y.T  # (N,D) @ (D,M) = (N,M)
+        D_yy = np.sum((y ** 2), axis=-1)[None, :]  # (1,M)
+        D_xy = D_xx - 2 * D_xy + D_yy  # (N,M)
+        if kernel == 'exp':
+            D_xy = np.sqrt(D_xy)
+        return np.exp(-D_xy)  # (N,M)
         
 
     def K_approx(self, x:np.array) -> 'LinearOperator':
