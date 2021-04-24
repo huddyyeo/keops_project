@@ -32,7 +32,7 @@ class Nystroem(GenericNystroem):
         S = torch.maximum(S, torch.ones(S.size()) * 1e-12)
         return U / torch.sqrt(S)@ V   # (Q,Q)
 
-    def kernel(self, x,y, kernel):
+    def get_kernel(self, x,y, kernel=None):
         D_xx = (x * x).sum(-1).unsqueeze(1)  # (N,1)
         D_xy = torch.matmul(x, y.permute(1, 0))  # (N,D) @ (D,M) = (N,M)
         D_yy = (y * y).sum(-1).unsqueeze(0)  # (1,M)
