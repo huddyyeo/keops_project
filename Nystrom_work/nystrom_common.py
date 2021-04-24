@@ -1,6 +1,6 @@
 import numpy as np
 import pykeops
-from typing import TypeVar, Union, Tuple
+from typing import TypeVar, Union
 import warnings
 
 # Generic placeholder for numpy and torch variables.
@@ -12,8 +12,8 @@ class GenericNystroem:
     '''Super class defining the Nystrom operations. The end user should
     use numpy.nystrom or torch.nystrom subclasses.'''
 
-    def __init__(self, n_components: int = 100, kernel: Union[str, callable] = 'rbf',
-                 sigma: float = None, inv_eps: float = None, verbose: bool = False,
+    def __init__(self, n_components: int = 100, kernel: Union[str, callable] = 'rbf', 
+                 sigma: float = None, inv_eps: float = None, verbose: bool = False, 
                  random_state: Union[None, int] = None):
 
         '''
@@ -58,7 +58,6 @@ class GenericNystroem:
             assert self.sigma > 0, 'Should be working with decaying exponential.'
 
         # Set default sigma
-        # if self.sigma is None and self.kernel == 'rbf':
         if self.sigma is None:
             self.sigma = np.sqrt(x.shape[1])
 
@@ -66,20 +65,20 @@ class GenericNystroem:
         self._update_dtype(x)
         # Number of samples
         n_samples = x.shape[0]
-
+        
         # Define basis
         rnd = self._check_random_state(self.random_state)
         inds = rnd.permutation(n_samples)
         basis_inds = inds[:self.n_components]
         basis = x[basis_inds]
-
+        
         # Build smaller kernel
         basis_kernel = self._pairwise_kernels(basis, dense=True)
-
+        
         # Decomposition is an abstract method that needs to be defined in each class
         self.normalization = self._decomposition_and_norm(basis_kernel)
-        self.components = basis
-        self.component_indices = inds
+        self.components_ = basis
+        self.component_indices_ = inds
 
         return self
 
@@ -88,6 +87,12 @@ class GenericNystroem:
         To be defined in the subclass
         """
         raise NotImplementedError('Subclass must implement the method _decomposition_and_norm.')
+    
+    def _get_kernel(self, x, y):
+        """
+        To be defined in the subclass
+        """
+        raise NotImplementedError('Subclass must implement the method _get_kernel.')
         
 
     def transform(self, x:generic_array, dense=True) -> generic_array:
@@ -102,8 +107,9 @@ class GenericNystroem:
         if type(x) == np.ndarray and not dense:
             warnings.warn("For Numpy transform it is best to use dense=True")
             
-        K_nq = self._pairwise_kernels(x, self.components, dense=dense)
-        return K_nq @ self.normalization # dim: n_samples  x n_components
+        K_nq = self._pairwise_kernels(x, self.components_, dense=dense)
+        x_new = K_nq @ self.normalization
+        return x_new
 
     def _pairwise_kernels(self, x:generic_array, y:generic_array=None, dense=False):
         '''Helper function to build kernel
@@ -122,11 +128,11 @@ class GenericNystroem:
         y = y / (np.sqrt(2)*self.sigma)
 
         x_i, x_j = self.tools.contiguous(x[:, None, :]), self.tools.contiguous(
-            y[None, :, :]) # (N, 1, M), (1, N, M) or (1, N, D)
+            y[None, :, :])  # (N, 1, M), (1, N, M) or (1, N, D)
 
         if self.kernel == 'rbf':
             if dense:
-                K_ij = self.get_kernel(x,y)
+                K_ij = self._get_kernel(x,y)
 
             else:
                 x_i, x_j = self.lazy_tensor(x_i), self.lazy_tensor(x_j)
@@ -135,7 +141,7 @@ class GenericNystroem:
 
         elif self.kernel == 'exp':
             if dense:
-                K_ij = self.get_kernel(x,y, kernel= 'exp')
+                K_ij = self._get_kernel(x,y, kernel='exp')
 
             else:
                 x_i, x_j = self.lazy_tensor(x_i), self.lazy_tensor(x_j)
@@ -162,7 +168,7 @@ class GenericNystroem:
     def _check_random_state(self, seed: Union[None, int]) -> None:
         '''Set/get np.random.RandomState instance for permutation
         Args
-            seed(None, int)
+            seed[None, int]
         Returns:
             numpy random state
         '''
@@ -174,4 +180,3 @@ class GenericNystroem:
             return np.random.RandomState(seed)
 
         raise ValueError(f'Seed {seed} must be None or an integer.')
-

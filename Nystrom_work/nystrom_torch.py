@@ -9,9 +9,9 @@ class Nystroem(GenericNystroem):
 
     def __init__(self, n_components=100, kernel='rbf', sigma: float = None,
                  inv_eps: float = None, verbose=False, random_state=None):
-
-        super().__init__(n_components, kernel, sigma, inv_eps,
-                    verbose, random_state)
+        
+        super().__init__(n_components, kernel, sigma, inv_eps, 
+                         verbose, random_state)
 
         self.tools = torchtools
         self.verbose = verbose
@@ -20,7 +20,6 @@ class Nystroem(GenericNystroem):
     def _update_dtype(self, x):
         pass
 
-
     def _decomposition_and_norm(self, basis_kernel):
         '''Function to return self.normalization used in fit(.) function
         Args:
@@ -28,11 +27,12 @@ class Nystroem(GenericNystroem):
         Returns:
             self.normalization(torch.tensor):  X_q is the q x D-dimensional sub matrix of matrix X
             '''
+
         U, S, V = torch.linalg.svd(basis_kernel, full_matrices=False) # (Q,Q), (Q,), (Q,Q)
         S = torch.maximum(S, torch.ones(S.size()) * 1e-12)
-        return U / torch.sqrt(S)@ V   # (Q,Q)
+        return torch.mm(U / torch.sqrt(S), V)   # (Q,Q)
 
-    def get_kernel(self, x,y, kernel=None):
+    def _get_kernel(self, x,y, kernel=None):
         D_xx = (x * x).sum(-1).unsqueeze(1)  # (N,1)
         D_xy = torch.matmul(x, y.permute(1, 0))  # (N,D) @ (D,M) = (N,M)
         D_yy = (y * y).sum(-1).unsqueeze(0)  # (1,M)
@@ -49,8 +49,9 @@ class Nystroem(GenericNystroem):
             K_approx(operator): Nystrom approximation to kernel which can be applied
                         downstream as K_approx @ v for some 1d tensor v'''
 
-        K_nq = self._pairwise_kernels(X, self.components, dense=False) # (N, Q)
-        return K_approx_operator(K_nq, self.normalization) # (N, B), with v[N, B]
+        K_nq = self._pairwise_kernels(X, self.components_, dense=False)  # (N, Q)
+        K_approx = K_approx_operator(K_nq, self.normalization) # (N, B), with v[N, B]
+        return K_approx  
 
 class K_approx_operator():
     ''' Helper class to return K_approx as an object 
@@ -64,10 +65,8 @@ class K_approx_operator():
 
     def __matmul__(self, v:torch.tensor) -> torch.tensor:
 
-        x = self.K_nq.T @ v # (Q,N), (N,B)
+        x = self.K_nq.T @ v  # (Q,N), (N,B)
         x = self.normalization @ self.normalization.T @ x # (Q,Q), (Q,Q), (Q, B)
-        x = self.K_nq @ x # (N,Q), (Q,B)
+        x = self.K_nq @ x  # (N,Q), (Q,B)
         return x # (N,B)
-
-
 
