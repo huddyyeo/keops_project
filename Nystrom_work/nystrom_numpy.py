@@ -18,7 +18,7 @@ class Nystroem(GenericNystroem):
 
         '''
         Args:
-            eigvals = eigenvalues index interval [a,b] for constructed K_q,
+            eigvals(list): eigenvalues index interval [a,b] for constructed K_q,
              where 0 <= a < b < length of K_q
             
         '''
@@ -48,9 +48,9 @@ class Nystroem(GenericNystroem):
         ''' Function to return Nystrom approximation to the kernel.
         
         Args:
-            x = data used in fit(.) function.
+            x(array): data used in fit(.) function.
         Returns
-            K = Nystrom approximation to kernel'''
+            K(operator): Nystrom approximation to kernel'''
     
         K_nq = self._pairwise_kernels(x, self.components_, dense=False)
         K_nq.backend="GPU_2D"

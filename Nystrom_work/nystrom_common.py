@@ -12,30 +12,25 @@ class GenericNystroem:
     '''Super class defining the Nystrom operations. The end user should
     use numpy.nystrom or torch.nystrom subclasses.'''
 
-    def __init__(self, n_components: int = 100, kernel: Union[str, callable] = 'rbf', sigma: float = None,
-                 eps: float = 0.05, inv_eps: float = None,
-                 verbose: bool = False,
-                 random_state: Union[None, int] = None, tools=None):
+    def __init__(self, n_components: int = 100, kernel: Union[str, callable] = 'rbf',
+                 sigma: float = None, inv_eps: float = None, verbose: bool = False,
+                 random_state: Union[None, int] = None):
 
         '''
-        n_components  = how many samples to select from data.
-        kernel  = type of kernel to use. Current options = {rbf:Gaussian,
-                                                                 exp: exponential}.
-        sigma  = exponential constant for the RBF and exponential kernels.
-        eps = size for square bins in block-sparse preprocessing.
-        k_means = number of centroids for KMeans algorithm in block-sparse
-                       preprocessing.
-        n_iter = number of iterations for KMeans.
-        dtype = type of data: np.float32 or np.float64
-        inv_eps = additive invertibility constant for matrix decomposition.
-        verbose = set True to print details.
-        random_state = to set a random seed for the random sampling of the samples.
-                        To be used when  reproducibility is needed.
+        Args:
+             n_components(int): how many samples to select from data.
+            kernel(str): type of kernel to use. Current options = {rbf:Gaussian,
+                                                                  exp: exponential}.
+            sigma(float): exponential constant for the RBF and exponential kernels.
+            dtype: type of data np.float32 or np.float64
+            inv_eps(float): additive invertibility constant for matrix decomposition.
+            verbose(bool): set True to print details.
+            random_state(int): to set a random seed for the random sampling of the samples.
+                            To be used when  reproducibility is needed.
         '''
         self.n_components = n_components
         self.kernel = kernel
         self.sigma = sigma
-        self.eps = eps
         self.dtype = None
         self.verbose = verbose
         self.random_state = random_state
@@ -113,13 +108,13 @@ class GenericNystroem:
 
     def _pairwise_kernels(self, x:generic_array, y:generic_array=None, dense=False):
         '''Helper function to build kernel
-        Args:   x[np.array or torch.tensor] = data
-                y[np.array or torch.tensor] = array/tensor
-                dense[bool] = False to work with lazy tensor reduction,
+        Args:   x(np.array or torch.tensor) = data
+                y(np.array or torch.tensor) = array/tensor
+                dense(bool) = False to work with lazy tensor reduction,
                               True to work with dense arrays/tensors
         Returns:
-                K_ij[LazyTensor] if dense = False
-                K_ij[np.array or torch.tensor] if dense = True
+                K_ij(LazyTensor) if dense = False
+                K_ij(np.array or torch.tensor) if dense = True
         '''
 
         if y is None:
@@ -162,7 +157,7 @@ class GenericNystroem:
         ''' Helper function that sets dtype to that of
             the given data in the fitting step.
         Args:
-            x [np.array or torch.tensor] = raw data to remap
+            x( np.array or torch.tensor) = raw data to remap
         Returns:
             None
         '''
@@ -172,7 +167,7 @@ class GenericNystroem:
     def _check_random_state(self, seed: Union[None, int]) -> None:
         '''Set/get np.random.RandomState instance for permutation
         Args
-            seed[None, int]
+            seed(None, int)
         Returns:
             numpy random state
         '''

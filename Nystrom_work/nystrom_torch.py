@@ -23,11 +23,11 @@ class Nystroem(GenericNystroem):
 
 
     def _decomposition_and_norm(self, basis_kernel):
-        '''Function to return self.nomalization_ used in fit(.) function
+        '''Function to return self.normalization_ used in fit(.) function
         Args:
-            basis_kernel[torch LazyTensor] = subset of input data
+            basis_kernel(torch LazyTensor): subset of input data
         Returns:
-            self.normalization_[torch.tensor]  X_q is the q x D-dimensional sub matrix of matrix X
+            self.normalization_(torch.tensor):  X_q is the q x D-dimensional sub matrix of matrix X
             '''
         basis_kernel = basis_kernel # dim: num_components x num_components
         U, S, V = torch.linalg.svd(basis_kernel, full_matrices=False) # dim: [100,100] x [100] x [100,100]
@@ -37,9 +37,9 @@ class Nystroem(GenericNystroem):
     def K_approx(self, X: torch.tensor) -> 'K_approx operator':
         ''' Function to return Nystrom approximation to the kernel.
         Args:
-            X = data used in fit(.) function.
+            X(tensor): data used in fit(.) function.
         Returns
-            K_approx = Nystrom approximation to kernel which can be applied
+            K_approx(operator): Nystrom approximation to kernel which can be applied
                         downstream as K_approx @ v for some 1d tensor v'''
 
         K_nq = self._pairwise_kernels(X, self.components_, dense=False)
