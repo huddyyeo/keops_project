@@ -95,35 +95,34 @@ class GenericNystroem:
         Applies transform on the data mapping it to the feature space
         which supports the approximated kernel.
         Args:
-            X = data to transform
+            X(array): data to transform, dim: n_samples n x m
         Returns
-            X = data after transformation
+            X(array): data after transformation, dim: n_samples n x n_components D
         '''
         if type(x) == np.ndarray and not dense:
             warnings.warn("For Numpy transform it is best to use dense=True")
             
         K_nq = self._pairwise_kernels(x, self.components, dense=dense)
-        x_new = K_nq @ self.normalization
-        return x_new
+        return K_nq @ self.normalization # dim: n_samples  x n_components
 
     def _pairwise_kernels(self, x:generic_array, y:generic_array=None, dense=False):
         '''Helper function to build kernel
-        Args:   x(np.array or torch.tensor) = data
-                y(np.array or torch.tensor) = array/tensor
-                dense(bool) = False to work with lazy tensor reduction,
+        Args:   x(np.array or torch.tensor): data N x M
+                y(np.array or torch.tensor): array/tensor N x D
+                dense(bool): False to work with lazy tensor reduction,
                               True to work with dense arrays/tensors
         Returns:
-                K_ij(LazyTensor) if dense = False
-                K_ij(np.array or torch.tensor) if dense = True
+                K_ij(LazyTensor): if dense = False
+                K_ij(np.array or torch.tensor): if dense = True
         '''
 
         if y is None:
             y = x
-        x = x / self.sigma
-        y = y / self.sigma
+        x = x / (np.sqrt(2)*self.sigma)
+        y = y / (np.sqrt(2)*self.sigma)
 
         x_i, x_j = self.tools.contiguous(x[:, None, :]), self.tools.contiguous(
-            y[None, :, :])
+            y[None, :, :]) # (N, 1, M), (1, N, M) or (1, N, D)
 
         if self.kernel == 'rbf':
             if dense:
@@ -148,7 +147,7 @@ class GenericNystroem:
             print('Please note that computations on custom kernels are dense-only.')
             K_ij = self.kernel(x_i, x_j)
 
-        return K_ij
+        return K_ij # (N, N)
 
     def _astype(self, data, type):
         return data
