@@ -11,7 +11,8 @@ class Nystroem(GenericNystroem):
     """
 
     def __init__(self, n_components=100, kernel='rbf', sigma: float = None,
-                 inv_eps: float = None, verbose=False, random_state=None):
+                 inv_eps: float = None, verbose=False, random_state=None,
+                 emb_dim = None):
 
         """
         Args:
@@ -23,6 +24,7 @@ class Nystroem(GenericNystroem):
             verbose: boolean: set True to print details.
             random_state: int: to set a random seed for the random sampling of the 
                 samples. To be used when reproducibility is needed.
+            emb_dim: int: allows to decrease dimension Q after SVD
         """
         
         super().__init__(n_components, kernel, sigma, inv_eps, 
@@ -31,6 +33,7 @@ class Nystroem(GenericNystroem):
         self.tools = torchtools
         self.verbose = verbose
         self.lazy_tensor = LazyTensor
+        self.emb_dim = emb_dim
 
     def _decomposition_and_norm(self, basis_kernel) ->torch.tensor:
         """
@@ -45,6 +48,9 @@ class Nystroem(GenericNystroem):
 
         U, S, V = torch.linalg.svd(basis_kernel, full_matrices=False) # (Q,Q), (Q,), (Q,Q)
         S = torch.maximum(S, torch.ones(S.size()) * 1e-12)
+        if self.emb_dim:
+            idx = torch.topk(S, self.emb_dim).indices
+            U, S, V = U[:, idx], S[idx], V[idx, :] # (Q, q), (q,q), (q, Q), q: emd_dim
         return torch.mm(U / torch.sqrt(S), V)   # (Q,Q)
 
     def _get_kernel(self, x:torch.tensor,y:torch.tensor, kernel=None):
