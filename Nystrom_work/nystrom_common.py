@@ -9,25 +9,27 @@ GenericLazyTensor = TypeVar('GenericLazyTensor')
 
 
 class GenericNystroem:
-    '''Super class defining the Nystrom operations. The end user should
-    use numpy.nystrom or torch.nystrom subclasses.'''
+    """
+    Super class defining the Nystrom operations. The end user should
+    use numpy.nystrom or torch.nystrom subclasses.
+
+    """
 
     def __init__(self, n_components: int = 100, kernel: Union[str, callable] = 'rbf', 
                  sigma: float = None, inv_eps: float = None, verbose: bool = False, 
                  random_state: Union[None, int] = None):
 
-        '''
+        """
         Args:
-             n_components(int): how many samples to select from data.
-            kernel(str): type of kernel to use. Current options = {rbf:Gaussian,
-                                                                  exp: exponential}.
-            sigma(float): exponential constant for the RBF and exponential kernels.
-            dtype: type of data np.float32 or np.float64
-            inv_eps(float): additive invertibility constant for matrix decomposition.
-            verbose(bool): set True to print details.
-            random_state(int): to set a random seed for the random sampling of the samples.
-                            To be used when  reproducibility is needed.
-        '''
+             n_components: int: how many samples to select from data.
+            kernel: str: type of kernel to use. Current options = {rbf:Gaussian,
+                exp: exponential}.
+            sigma: float: exponential constant for the RBF and exponential kernels.
+            inv_eps: float: additive invertibility constant for matrix decomposition.
+            verbose: boolean: set True to print details.
+            random_state: int: to set a random seed for the random sampling of the 
+                samples. To be used when reproducibility is needed.
+        """
         self.n_components = n_components
         self.kernel = kernel
         self.sigma = sigma
@@ -43,10 +45,12 @@ class GenericNystroem:
             self.inv_eps = 1e-8
 
     def fit(self, x: generic_array) -> 'GenericNystrom':
-        '''
-        Args:   x = array or tensor of shape (n_samples, n_features)
-        Returns: Fitted instance of the class
-        '''
+        """
+        Args:   
+            x: generic_array: array or tensor of shape (n_samples, n_features)
+        Returns: 
+            Fitted instance of the class
+        """
         self.dtype = x.dtype
 
         # Basic checks
@@ -59,10 +63,10 @@ class GenericNystroem:
 
         # Set default sigma
         if self.sigma is None:
-            self.sigma = np.sqrt(x.shape[1])
+            self.sigma = np.sqrt(x.shape[1]) / np.sqrt(2)
 
         # Update dtype
-        self._update_dtype(x)
+        self._update_dtype()
         # Number of samples
         n_samples = x.shape[0]
         
@@ -85,25 +89,41 @@ class GenericNystroem:
     def _decomposition_and_norm(self, X: GenericLazyTensor):
         """
         To be defined in the subclass
+
+        Args:
+          X: GenericLazyTensor: 
         """
         raise NotImplementedError('Subclass must implement the method _decomposition_and_norm.')
     
-    def _get_kernel(self, x, y):
+    def _get_kernel(self, x:generic_array, y:generic_array) -> generic_array:
         """
-        To be defined in the subclass
+        To be implmented in the subclass. 
+
+        Args:
+            x: generic_array
+            y: generic_array
+
+        Returns:
+            K: generic_array: dense kernel array
+          
         """
         raise NotImplementedError('Subclass must implement the method _get_kernel.')
         
 
     def transform(self, x:generic_array, dense=True) -> generic_array:
-        '''
-        Applies transform on the data mapping it to the feature space
+        """Applies transform on the data mapping it to the feature space
         which supports the approximated kernel.
+
         Args:
-            X(array): data to transform, dim: n_samples n x m
+            X: generic_array: data to transform, dim: n_samples n x m
         Returns
             X(array): data after transformation, dim: n_samples n x n_components D
-        '''
+            x:generic_array: 
+          dense:  (Default value = True)
+
+        Returns:
+
+        """
         if type(x) == np.ndarray and not dense:
             warnings.warn("For Numpy transform it is best to use dense=True")
             
@@ -112,15 +132,24 @@ class GenericNystroem:
         return x_new
 
     def _pairwise_kernels(self, x:generic_array, y:generic_array=None, dense=False):
-        '''Helper function to build kernel
-        Args:   x(np.array or torch.tensor): data N x M
+        """Helper function to build kernel
+  
                 y(np.array or torch.tensor): array/tensor N x D
                 dense(bool): False to work with lazy tensor reduction,
                               True to work with dense arrays/tensors
+
+        Args:
+          x:generic_array: data, shape N x M 
+          y:generic_array:  (Default value = None), if given N x D array
+          dense: boolean: (Default value = False). Use False to return a 
+            to return a dense generic_array. Use True to return a LazyTensor
+            version.
+
         Returns:
-                K_ij(LazyTensor): if dense = False
-                K_ij(np.array or torch.tensor): if dense = True
-        '''
+          LazyTensor: if dense == False
+          dense array: if dense == True
+
+        """
 
         if y is None:
             y = x
@@ -154,24 +183,23 @@ class GenericNystroem:
 
         return K_ij # (N, N)
 
-    def _update_dtype(self, x):
-        ''' Helper function that sets dtype to that of
-            the given data in the fitting step.
-        Args:
-            x( np.array or torch.tensor) = raw data to remap
-        Returns:
-            None
-        '''
-        self.dtype = x.dtype
+    def _update_dtype(self) -> None:
+        """Helper function that sets dtype to that of
+            the given data in the fitting step. Fixes inv_eps data type to 
+            that of input data.
+        """
         self.inv_eps = np.array([self.inv_eps]).astype(self.dtype)[0]
 
     def _check_random_state(self, seed: Union[None, int]) -> None:
-        '''Set/get np.random.RandomState instance for permutation
-        Args
-            seed[None, int]
+        """
+        Set/get np.random.RandomState instance for permutation.
+
+        Args:
+            seed: Union[None: int]: 
+
         Returns:
             numpy random state
-        '''
+        """
 
         if seed is None:
             return np.random.mtrand._rand

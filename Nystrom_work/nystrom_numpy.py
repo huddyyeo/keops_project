@@ -10,18 +10,28 @@ from pykeops.numpy import LazyTensor
 from typing import Tuple, List
 
 class Nystroem(GenericNystroem):
-    '''Nystrom class to work with Numpy arrays'''
+    """
+    Nystroem class to work with Numpy arrays.
+    """
 
     def __init__(self, n_components=100, kernel='rbf', sigma:float = None,
                  inv_eps:float = None, verbose = False, random_state=None, 
                  eigvals:List[int]=None):
 
-        '''
+        """
         Args:
-            eigvals = eigenvalues index interval [a,b] for constructed K_q,
-             where 0 <= a < b < length of K_q
+             n_components: int: how many samples to select from data.
+            kernel: str: type of kernel to use. Current options = {rbf:Gaussian,
+                exp: exponential}.
+            sigma: float: exponential constant for the RBF and exponential kernels.
+            inv_eps: float: additive invertibility constant for matrix decomposition.
+            verbose: boolean: set True to print details.
+            random_state: int: to set a random seed for the random sampling of the 
+                samples. To be used when reproducibility is needed.
+            eigvals: eigenvalues index interval [a,b] for constructed K_q,
+                where 0 <= a < b < length of K_q
             
-        '''
+        """
         super().__init__(n_components, kernel, sigma, inv_eps, verbose, 
                          random_state)
         
@@ -35,7 +45,12 @@ class Nystroem(GenericNystroem):
             than size of K_q = n_components'
 
     def _decomposition_and_norm(self, X:np.array) -> np.array:
-        '''Computes K_q^{-1/2}'''
+        """
+        Computes K_q^{-1/2}.
+
+        Returns:
+            K_q^{-1/2}: np.array
+        """
 
         X = X + np.eye(X.shape[0], dtype=self.dtype)*self.inv_eps   # (Q,Q)  Q - num_components     
         S,U = eigh(X, eigvals=self.eigvals) # (Q,), (Q,Q)
@@ -43,7 +58,7 @@ class Nystroem(GenericNystroem):
         
         return np.dot(U / np.sqrt(S), U.T) # (Q,Q)
 
-    def _get_kernel(self, x, y, kernel=None):
+    def _get_kernel(self, x:np.array, y:np.array, kernel=None) -> np.array:
     
         D_xx = np.sum((x ** 2), axis=-1)[:, None]  # (N,1)
         D_xy = x @ y.T  # (N,D) @ (D,M) = (N,M)
@@ -54,19 +69,26 @@ class Nystroem(GenericNystroem):
         return np.exp(-D_xy)  # (N,M)
         
     def K_approx(self, x:np.array) -> 'LinearOperator':
-        ''' Function to return Nystrom approximation to the kernel.
+        """
+        Method to return Nystrom approximation to the kernel.
         
         Args:
-            x = data used in fit(.) function.
+            x: np.array: data used in fit(.) function.
         Returns
-            K = Nystrom approximation to kernel'''
+            K: LinearOperator: Nystrom approximation to kernel
+        """
     
         K_nq = self._pairwise_kernels(x, self.components_, dense=False) # (N, Q)
-        K_nq.backend="GPU_2D"
         K_nq = aslinearoperator(K_nq)
-        K_q_inv = (aslinearoperator(self.normalization).T @ 
-                    aslinearoperator(self.normalization) 
-                ) # (Q,Q), (Q,Q)
-        K_approx = K_nq @ K_q_inv @ K_nq.T # (N,Q), (Q,Q), (Q,N)
+
+        K_qn = K_nq.T
+        K_qn.backend="GPU_2D"
+        K_qn = aslinearoperator(K_qn)
+
+        K_q_inv = self.normalization.T @ self.normalization  # (Q,Q)
+        K_q_inv = aslinearoperator(K_q_inv)  
+
+        K_approx = K_nq @ K_q_inv @ K_qn # (N,Q), (Q,Q), (Q,N)
+
         return K_approx # (N, N)
     
