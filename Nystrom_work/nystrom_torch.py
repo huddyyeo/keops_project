@@ -96,7 +96,8 @@ class K_approx_operator():
     def __matmul__(self, v:torch.tensor) -> torch.tensor:
 
         K_qn = self.K_nq.T
-        K_qn.backend = "GPU_2D"
+        self.K_nq.backend = "GPU_2D"
+
         x = K_qn @ v  # (Q,N), (N,B)
         x = self.normalization @ self.normalization.T @ x # (Q,Q), (Q,Q), (Q, B)
         x = self.K_nq @ x  # (N,Q), (Q,B)
