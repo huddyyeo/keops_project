@@ -16,20 +16,19 @@ class Nystroem(GenericNystroem):
 
     def __init__(self, n_components=100, kernel='rbf', sigma:float = None,
                  inv_eps:float = None, verbose = False, random_state=None, 
-                 eigvals:List[int]=None):
+                 top_k:int=None):
 
         """
         Args:
-             n_components: int: how many samples to select from data.
+             n_components (int): how many samples to select from data.
             kernel: str: type of kernel to use. Current options = {rbf:Gaussian,
                 exp: exponential}.
-            sigma: float: exponential constant for the RBF and exponential kernels.
-            inv_eps: float: additive invertibility constant for matrix decomposition.
-            verbose: boolean: set True to print details.
-            random_state: int: to set a random seed for the random sampling of the 
+            sigma (float): exponential constant for the RBF and exponential kernels.
+            inv_eps (float): additive invertibility constant for matrix decomposition.
+            top_k (int): keep the top-k eigenpairs after the decomposition of K_q.
+            verbose  (boolean): set True to print details.
+            random_state (int): to set a random seed for the random sampling of the 
                 samples. To be used when reproducibility is needed.
-            eigvals: eigenvalues index interval [a,b] for constructed K_q,
-                where 0 <= a < b < length of K_q
             
         """
         super().__init__(n_components, kernel, sigma, inv_eps, verbose, 
@@ -37,12 +36,11 @@ class Nystroem(GenericNystroem):
         
         self.tools = numpytools
         self.lazy_tensor = LazyTensor
-        self.eigvals = eigvals
+        self.top_k = top_k
 
-        if eigvals:
-            assert eigvals[0] < eigvals[1], 'eigvals = [a,b] needs a < b'
-            assert eigvals[1] < n_components, 'max eigenvalue index needs to be less\
-            than size of K_q = n_components'
+        if top_k:
+            assert top_k <= n_components, 'min_eigval needs to satisfy\
+                min_eigval < n_components'
 
     def _decomposition_and_norm(self, X:np.array) -> np.array:
         """
@@ -53,7 +51,13 @@ class Nystroem(GenericNystroem):
         """
 
         X = X + np.eye(X.shape[0], dtype=self.dtype)*self.inv_eps   # (Q,Q)  Q - num_components     
-        S,U = eigh(X, eigvals=self.eigvals) # (Q,), (Q,Q)
+        
+        if self.top_k:
+            eigvals = [self.n_components - self.top_k, self.n_components-1]
+        else:
+            eigvals = None
+        
+        S,U = eigh(X, eigvals=eigvals) # (Q,), (Q,Q)
         S = np.maximum(S, 1e-12)
         
         return np.dot(U / np.sqrt(S), U.T) # (Q,Q)
