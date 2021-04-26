@@ -49,8 +49,8 @@ class Nystroem(GenericNystroem):
         U, S, V = torch.linalg.svd(basis_kernel, full_matrices=False) # (Q,Q), (Q,), (Q,Q)
         S = torch.maximum(S, torch.ones(S.size()) * 1e-12)
         if self.emb_dim:
-            idx = torch.topk(S, self.emb_dim).indices
-            U, S, V = U[:, idx], S[idx], V[idx, :] # (Q, q), (q,q), (q, Q), q: emd_dim
+            idx = torch.topk(-S, self.emb_dim).indices
+            U, S, V = U[:, idx], S[idx], V[:,idx].T # (Q, q), (q,q), (q, Q), q: emd_dim
         return torch.mm(U / torch.sqrt(S), V)   # (Q,Q)
 
     def _get_kernel(self, x:torch.tensor,y:torch.tensor, kernel=None):
