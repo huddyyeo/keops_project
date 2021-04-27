@@ -15,8 +15,8 @@ class Nystroem(GenericNystroem):
     """
 
     def __init__(self, n_components=100, kernel='rbf', sigma:float = None,
-                 inv_eps:float = None, verbose = False, random_state=None, 
-                 top_k:int=None):
+                 inv_eps:float = None, top_k:int = None, verbose = False, 
+                 random_state=None):
 
         """
         Args:
@@ -31,12 +31,11 @@ class Nystroem(GenericNystroem):
                 samples. To be used when reproducibility is needed.
             
         """
-        super().__init__(n_components, kernel, sigma, inv_eps, verbose, 
+        super().__init__(n_components, kernel, sigma, inv_eps, top_k, verbose, 
                          random_state)
         
         self.tools = numpytools
         self.lazy_tensor = LazyTensor
-        self.top_k = top_k
 
         if top_k:
             assert top_k <= n_components, 'min_eigval needs to satisfy\
@@ -77,9 +76,9 @@ class Nystroem(GenericNystroem):
         Method to return Nystrom approximation to the kernel.
         
         Args:
-            x: np.array: data used in fit(.) function.
+            x (np.array): data used in fit(.) function.
         Returns
-            K: LinearOperator: Nystrom approximation to kernel
+            K (LinearOperator): Nystrom approximation to kernel
         """
         K_nq = self._pairwise_kernels(x, self.components_, dense=False) # (N, Q)
         

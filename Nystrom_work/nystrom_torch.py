@@ -11,8 +11,8 @@ class Nystroem(GenericNystroem):
     """
 
     def __init__(self, n_components=100, kernel='rbf', sigma: float = None,
-                 inv_eps: float = None, verbose=False, random_state=None,
-                 emb_dim = None):
+                 inv_eps: float = None, top_k:int = None, verbose=False, 
+                 random_state=None):
 
         """
         Args:
@@ -21,19 +21,18 @@ class Nystroem(GenericNystroem):
                 exp: exponential}.
             sigma: float: exponential constant for the RBF and exponential kernels.
             inv_eps: float: additive invertibility constant for matrix decomposition.
-            verbose: boolean: set True to print details.
+            top_k (int): keep the top-k eigenpairs after the decomposition of K_q.
+            erbose: boolean: set True to print details.
             random_state: int: to set a random seed for the random sampling of the 
                 samples. To be used when reproducibility is needed.
-            emb_dim: int: allows to decrease dimension Q after SVD
         """
         
-        super().__init__(n_components, kernel, sigma, inv_eps, 
+        super().__init__(n_components, kernel, sigma, inv_eps, top_k,
                          verbose, random_state)
 
         self.tools = torchtools
         self.verbose = verbose
         self.lazy_tensor = LazyTensor
-        self.emb_dim = emb_dim
 
     def _decomposition_and_norm(self, basis_kernel) ->torch.tensor:
         """
@@ -48,8 +47,8 @@ class Nystroem(GenericNystroem):
 
         U, S, V = torch.linalg.svd(basis_kernel, full_matrices=False) # (Q,Q), (Q,), (Q,Q)
         S = torch.maximum(S, torch.ones(S.size()) * 1e-12)
-        if self.emb_dim:
-            idx = torch.topk(-S, self.emb_dim).indices
+        if self.top_k:
+            idx = torch.topk(-S, self.top_k).indices
             U, S, V = U[:, idx], S[idx], V[:,idx].T # (Q, q), (q,q), (q, Q), q: emd_dim
         return torch.mm(U / torch.sqrt(S), V)   # (Q,Q)
 

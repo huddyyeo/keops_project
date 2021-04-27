@@ -16,18 +16,19 @@ class GenericNystroem:
     """
 
     def __init__(self, n_components: int = 100, kernel: Union[str, callable] = 'rbf', 
-                 sigma: float = None, inv_eps: float = None, verbose: bool = False, 
-                 random_state: Union[None, int] = None):
+                 sigma: float = None, inv_eps: float = None, top_k:int = None,
+                 verbose: bool = False, random_state: Union[None, int] = None):
 
         """
         Args:
-             n_components: int: how many samples to select from data.
-            kernel: str: type of kernel to use. Current options = {rbf:Gaussian,
+             n_components (int): how many samples to select from data.
+            kernel (str): type of kernel to use. Current options = {rbf:Gaussian,
                 exp: exponential}.
-            sigma: float: exponential constant for the RBF and exponential kernels.
-            inv_eps: float: additive invertibility constant for matrix decomposition.
-            verbose: boolean: set True to print details.
-            random_state: int: to set a random seed for the random sampling of the 
+            sigma (float): exponential constant for the RBF and exponential kernels.
+            inv_eps (float): additive invertibility constant for matrix decomposition.
+            top_k (int): keep the top-k eigenpairs after the decomposition of K_q.
+            verbose (boolean): set True to print details.
+            random_state (int): to set a random seed for the random sampling of the 
                 samples. To be used when reproducibility is needed.
         """
         self.n_components = n_components
@@ -38,11 +39,13 @@ class GenericNystroem:
         self.random_state = random_state
         self.tools = None
         self.lazy_tensor = None
+        self.top_k = top_k
 
         if inv_eps:
             self.inv_eps = inv_eps
         else:
             self.inv_eps = 1e-8
+        
 
     def fit(self, x: generic_array) -> 'GenericNystrom':
         """
